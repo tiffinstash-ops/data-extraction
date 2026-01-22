@@ -28,27 +28,24 @@ jobs:
 
       - name: Build and Push Docker image
         run: |
-          # Changed context from ./react to . since Dockerfile is in root
+          # Build context is current directory (.)
           docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:latest .
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:latest
 
-      # Use the official auth action for robust authentication
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v1
+      # Authenticate via JSON key
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v1'
         with:
-          credentials_json: ${{ secrets.GOOGLE_SA_KEY }}
+          credentials_json: '${{ secrets.GOOGLE_SA_KEY }}'
 
-      - name: Setup Cloud SDK
-        # This will automatically pick up the credentials from the auth step
-        uses: google-github-actions/setup-gcloud@v1
+      # Deploy using the official Cloud Run action
+      - name: 'Deploy to Cloud Run'
+        uses: 'google-github-actions/deploy-cloudrun@v1'
         with:
-          project_id: pelagic-campus-484800-b3
-
-      - name: Deploy to Google Cloud Run
-        run: |
-          gcloud run deploy data-extraction \
-            --image=${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:latest \
-            --platform=managed \
-            --region=us-east1 \
-            --allow-unauthenticated \
-            --set-env-vars ENCODED_SECRET="$ENCODED_SECRET"
+          service: 'data-extraction'
+          image: '${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:latest'
+          region: 'us-east1'
+          flags: '--allow-unauthenticated'
+          env_vars: |
+            ENCODED_SECRET=${{ env.ENCODED_SECRET }}
