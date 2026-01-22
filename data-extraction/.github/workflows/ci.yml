@@ -25,7 +25,7 @@ jobs:
 
       - name: Build Dashboard Docker image
         run: |
-            docker build -t data-extraction --build-arg REACT_APP_MAINTENANCE_WINDOW=true ./react
+            docker build -t data-extraction .
 
       - name: Tag and push Dashboard image
         run: |
