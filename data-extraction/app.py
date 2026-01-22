@@ -5,12 +5,14 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 import io
+import os
+from functools import partial
 from shopify_client import ShopifyClient
 from auth import get_shopify_access_token
-from config import SHOPIFY_URL, SHOPIFY_SHOP_BASE_URL, ACCESS_TOKEN, update_access_token
+from config import SHOPIFY_URL, SHOPIFY_SHOP_BASE_URL, ACCESS_TOKEN, update_access_token, SUPERUSER_USERNAME, SUPERUSER_PASSWORD
 from utils import create_date_filter_query, order_to_csv_row
 from constants import CSV_FIELDNAMES
-
+from transformations import apply_all_transformations
 
 # Page configuration
 st.set_page_config(
@@ -94,6 +96,9 @@ def initialize_session_state():
             
     if 'orders_data' not in st.session_state:
         st.session_state.orders_data = None
+        
+    if 'superuser_authenticated' not in st.session_state:
+        st.session_state.superuser_authenticated = False
 
 
 def authenticate():
@@ -146,18 +151,158 @@ def fetch_orders(start_date: str, end_date: str) -> pd.DataFrame:
         if df[col].dtype == 'object':
             df[col] = df[col].astype(str)
             
+    # Apply transformations
+    # df = apply_all_transformations(df)
+            
     return df
 
 
-def main():
-    """Main Streamlit app."""
-    initialize_session_state()
+def load_sellers():
+    """Load sellers from local CSV file."""
+    try:
+        csv_path = os.path.join(os.path.dirname(__file__), 'seller-info.csv')
+        df = pd.read_csv(csv_path)
+        return df
+    except Exception as e:
+        st.error(f"Error loading seller-info.csv: {e}")
+        return pd.DataFrame(columns=['Seller', 'Address'])
+
+
+def display_orders(df: pd.DataFrame, start_date, end_date):
+    """Display the orders metrics, table, and export options."""
+    if len(df) == 0:
+        st.warning("No orders found for the selected date range.")
+        return
     
-    # Header
-    st.title("🛍️ Shopify Order Exporter")
-    st.markdown("Export and analyze your Shopify orders with custom date ranges")
+    # Metrics
+    st.header("📊 Order Statistics")
     
-    # Sidebar for authentication and settings
+    col1, col2, col3, col4 = st.columns(4)
+    
+    # helper to find col
+    def get_col(candidates):
+        for c in candidates:
+            if c in df.columns:
+                return c
+        return None
+
+    with col1:
+        st.markdown(f"""
+            <div class="metric-card">
+                <h3 style="margin:0; font-size: 2rem;">{len(df)}</h3>
+                <p style="margin:0; opacity: 0.9;">Total Line Items</p>
+            </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        oid_col = get_col(['A', 'ORDER ID'])
+        unique_orders = df[oid_col].nunique() if oid_col else 0
+        st.markdown(f"""
+            <div class="metric-card">
+                <h3 style="margin:0; font-size: 2rem;">{unique_orders}</h3>
+                <p style="margin:0; opacity: 0.9;">Unique Orders</p>
+            </div>
+        """, unsafe_allow_html=True)
+    
+    with col3:
+        # Convert back to numeric for calculation since we converted to string for Arrow
+        try:
+            qty_col = get_col(['W', 'QUANTITY'])
+            total_quantity = pd.to_numeric(df[qty_col], errors='coerce').sum() if qty_col else 0
+        except:
+            total_quantity = 0
+            
+        st.markdown(f"""
+            <div class="metric-card">
+                <h3 style="margin:0; font-size: 2rem;">{int(total_quantity)}</h3>
+                <p style="margin:0; opacity: 0.9;">Total Quantity</p>
+            </div>
+        """, unsafe_allow_html=True)
+    
+    with col4:
+        city_col = get_col(['H', 'Shipping address city', 'Select Delivery City'])
+        unique_cities = df[city_col].nunique() if city_col else 0
+        st.markdown(f"""
+            <div class="metric-card">
+                <h3 style="margin:0; font-size: 2rem;">{unique_cities}</h3>
+                <p style="margin:0; opacity: 0.9;">Unique Cities</p>
+            </div>
+        """, unsafe_allow_html=True)
+    
+    st.divider()
+    
+    # Data table
+    st.header("📋 Order Details")
+    
+    # Search and filter options
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        search_term = st.text_input("🔍 Search", placeholder="Search by order ID, email, city, etc.")
+    with col2:
+        show_columns = st.multiselect(
+            "Select Columns to Display",
+            options=df.columns.tolist(),
+            default=df.columns.tolist()[:5] # Default show first 5
+        )
+    
+    # Filter dataframe based on search
+    if search_term:
+        mask = df.astype(str).apply(lambda x: x.str.contains(search_term, case=False, na=False)).any(axis=1)
+        filtered_df = df[mask]
+    else:
+        filtered_df = df
+    
+    # Display columns selection
+    if show_columns:
+        display_df = filtered_df[show_columns]
+    else:
+        display_df = filtered_df
+    
+    # Display dataframe
+    st.dataframe(
+        display_df,
+        use_container_width=True, 
+        height=500
+    )
+    
+    st.info(f"Showing {len(filtered_df)} of {len(df)} total line items")
+    
+    # Export options
+    st.header("💾 Export Data")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # CSV export
+        csv_buffer = io.StringIO()
+        df.to_csv(csv_buffer, index=False)
+        csv_data = csv_buffer.getvalue()
+        
+        st.download_button(
+            label="📥 Download as CSV",
+            data=csv_data,
+            file_name=f"shopify_orders_{start_date}_{end_date}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+    
+    with col2:
+        # Excel export
+        excel_buffer = io.BytesIO()
+        df.to_excel(excel_buffer, index=False, engine='openpyxl')
+        excel_data = excel_buffer.getvalue()
+        
+        st.download_button(
+            label="📥 Download as Excel",
+            data=excel_data,
+            file_name=f"shopify_orders_{start_date}_{end_date}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+
+
+def render_sidebar():
+    """Render the sidebar with authentication and shop info."""
     with st.sidebar:
         st.header("⚙️ Configuration")
         
@@ -192,10 +337,6 @@ def main():
                 st.session_state.authenticated = False
                 st.session_state.access_token = ""
                 st.session_state.orders_data = None
-                # Optional: Clear cache on logout if desired
-                # import os
-                # if os.path.exists("token_cache.json"):
-                #     os.remove("token_cache.json")
                 st.rerun()
         
         st.divider()
@@ -204,11 +345,13 @@ def main():
         st.subheader("🏪 Shop Information")
         st.text(f"Shop: braless-butter")
         st.text(f"API Version: 2026-01")
-    
-    # Main content
+
+
+def render_main_content():
+    """Render the main content area with date pickers and fetch button."""
+    # Check auth
     if not st.session_state.authenticated:
         st.info("⏳ Attempting to auto-authenticate...")
-        # One last try to auto-auth triggers if env vars were just set
         if authenticate():
              st.rerun()
              
@@ -224,7 +367,7 @@ def main():
         If these are not set, please enter an access token manually in the sidebar.
         """)
         return
-    
+
     # Date range selection
     st.header("📅 Select Date Range")
     
@@ -269,126 +412,99 @@ def main():
     
     # Display results
     if st.session_state.orders_data is not None:
-        df = st.session_state.orders_data
+        display_orders(st.session_state.orders_data, start_date, end_date)
+
+
+def check_superuser_auth():
+    """Handle superuser authentication for the dashboard."""
+    if st.session_state.superuser_authenticated:
+        return True
+
+    st.title("🔒 Superuser Login")
+    st.markdown("Please log in to access the main dashboard.")
+    st.info("Note: Seller pages are accessible via the sidebar without this login.")
+    
+    with st.form("superuser_login"):
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Login")
         
-        if len(df) == 0:
-            st.warning("No orders found for the selected date range.")
-            return
-        
-        # Metrics
-        st.header("📊 Order Statistics")
-        
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.markdown(f"""
-                <div class="metric-card">
-                    <h3 style="margin:0; font-size: 2rem;">{len(df)}</h3>
-                    <p style="margin:0; opacity: 0.9;">Total Line Items</p>
-                </div>
-            """, unsafe_allow_html=True)
-        
-        with col2:
-            unique_orders = df['ORDER ID'].nunique()
-            st.markdown(f"""
-                <div class="metric-card">
-                    <h3 style="margin:0; font-size: 2rem;">{unique_orders}</h3>
-                    <p style="margin:0; opacity: 0.9;">Unique Orders</p>
-                </div>
-            """, unsafe_allow_html=True)
-        
-        with col3:
-            # Convert back to numeric for calculation since we converted to string for Arrow
-            try:
-                total_quantity = pd.to_numeric(df['QUANTITY'], errors='coerce').sum()
-            except:
-                total_quantity = 0
+        if submitted:
+            if not SUPERUSER_USERNAME or not SUPERUSER_PASSWORD:
+                st.error("Superuser credentials not configured in environment variables.")
+                return False
                 
-            st.markdown(f"""
-                <div class="metric-card">
-                    <h3 style="margin:0; font-size: 2rem;">{int(total_quantity)}</h3>
-                    <p style="margin:0; opacity: 0.9;">Total Quantity</p>
-                </div>
-            """, unsafe_allow_html=True)
+            if username == SUPERUSER_USERNAME and password == SUPERUSER_PASSWORD:
+                st.session_state.superuser_authenticated = True
+                st.success("Login successful!")
+                st.rerun()
+            else:
+                st.error("Invalid credentials")
+                
+    return False
+
+
+def dashboard_page():
+    """The main dashboard page."""
+    # Check superuser login first
+    if not check_superuser_auth():
+        return
+
+    st.title("🛍️ Shopify Order Exporter")
+    st.markdown("Export and analyze your Shopify orders with custom date ranges")
+    
+    render_sidebar()
+    render_main_content()
+
+
+def seller_page(seller_name, address):
+    """Page for a specific seller."""
+    st.title(f"Seller: {seller_name}")
+    st.caption(f"Address: {address}")
+    
+    # Additional processing placeholder
+    st.info(f"Data view for {seller_name}")
+    
+    render_sidebar()
+    
+    # Reuse the same main content logic (Date pickers, Fetch, Display) called "processed data"
+    render_main_content()
+
+
+def main():
+    """Main entry point setting up navigation."""
+    initialize_session_state()
+    
+    # Load sellers for dynamic pages
+    sellers_df = load_sellers()
+    
+    # Define pages
+    pages = [
+        st.Page(dashboard_page, title="Home", icon="🏠", url_path="dashboard")
+    ]
+    
+    for _, row in sellers_df.iterrows():
+        seller = str(row['Seller'])
+        address = str(row['Address'])
         
-        with col4:
-            unique_cities = df['Shipping address city'].nunique()
-            st.markdown(f"""
-                <div class="metric-card">
-                    <h3 style="margin:0; font-size: 2rem;">{unique_cities}</h3>
-                    <p style="margin:0; opacity: 0.9;">Unique Cities</p>
-                </div>
-            """, unsafe_allow_html=True)
+        # Determine URL path (strip leading slash if present)
+        # Assuming Address is like '/abc-1234' -> url_path 'abc-1234'
+        url_path = address.lstrip('/') if address.startswith('/') else address
         
-        st.divider()
-        
-        # Data table
-        st.header("📋 Order Details")
-        
-        # Search and filter options
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            search_term = st.text_input("🔍 Search", placeholder="Search by order ID, email, city, etc.")
-        with col2:
-            show_columns = st.multiselect(
-                "Select Columns to Display",
-                options=CSV_FIELDNAMES,
+        pages.append(
+            st.Page(
+                partial(seller_page, seller, address),
+                title=seller,
+                icon="👤",
+                url_path=url_path
             )
-        
-        # Filter dataframe based on search
-        if search_term:
-            mask = df.astype(str).apply(lambda x: x.str.contains(search_term, case=False, na=False)).any(axis=1)
-            filtered_df = df[mask]
-        else:
-            filtered_df = df
-        
-        # Display columns selection
-        if show_columns:
-            display_df = filtered_df[show_columns]
-        else:
-            display_df = filtered_df
-        
-        # Display dataframe
-        st.dataframe(
-            display_df,
-            use_container_width=True, 
-            height=500
         )
-        
-        st.info(f"Showing {len(filtered_df)} of {len(df)} total line items")
-        
-        # Export options
-        st.header("💾 Export Data")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # CSV export
-            csv_buffer = io.StringIO()
-            df.to_csv(csv_buffer, index=False)
-            csv_data = csv_buffer.getvalue()
-            
-            st.download_button(
-                label="📥 Download as CSV",
-                data=csv_data,
-                file_name=f"shopify_orders_{start_date}_{end_date}.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
-        
-        with col2:
-            # Excel export
-            excel_buffer = io.BytesIO()
-            df.to_excel(excel_buffer, index=False, engine='openpyxl')
-            excel_data = excel_buffer.getvalue()
-            
-            st.download_button(
-                label="📥 Download as Excel",
-                data=excel_data,
-                file_name=f"shopify_orders_{start_date}_{end_date}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
+    
+    # Setup navigation
+    pg = st.navigation(pages)
+    
+    # Run the selected page
+    pg.run()
 
 
 if __name__ == "__main__":
