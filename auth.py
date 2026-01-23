@@ -14,6 +14,35 @@ CACHE_FILE = "token_cache.json"
 CACHE_DURATION_HOURS = 23
 
 
+def get_secret(env_name: str, file_path: str) -> Optional[str]:
+    """
+    Get secret from environment variable or mounted file.
+    
+    Args:
+        env_name: Environment variable name to check
+        file_path: File path to check if env var not found
+        
+    Returns:
+        Secret value if found, None otherwise
+    """
+    # 1. Check environment variable
+    val = os.getenv(env_name)
+    file_path = f"/etc/secrets/{env_name}"
+
+    if val:
+        return val
+    
+    # 2. Check mounted file path
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, "r") as f:
+                return f.read().strip()
+        except Exception as e:
+            print(f"⚠️ Failed to read secret from {file_path}: {e}")
+            
+    return None
+
+
 class TokenCache:
     """Handles saving and loading the access token from a file."""
     
@@ -96,8 +125,8 @@ class ShopifyAuth:
             return cached_token
 
         # 2. If no cache, try to generate using credentials
-        client_id = client_id or os.getenv("SHOPIFY_CLIENT_ID")
-        client_secret = client_secret or os.getenv("SHOPIFY_CLIENT_SECRET")
+        client_id = client_id or get_secret("shopify_client_id")
+        client_secret = client_secret or get_secret("shopify_client_secret")
         
         # Try to fetch new token if credentials are present
         if client_id and client_secret:
@@ -148,8 +177,8 @@ class ShopifyAuth:
         if cached_token:
             return {"access_token": cached_token, "source": "cache"}
 
-        client_id = client_id or os.getenv("SHOPIFY_CLIENT_ID")
-        client_secret = client_secret or os.getenv("SHOPIFY_CLIENT_SECRET")
+        client_id = client_id or get_secret("shopify_client_id")
+        client_secret = client_secret or get_secret("shopify_client_secret")
         
         if not client_id or not client_secret:
              return {"error": "Missing credentials"}
