@@ -2,6 +2,7 @@
 Configuration settings for Shopify API integration.
 """
 import os
+from auth import get_tiffinstash_secret
 
 # Shopify Shop Configuration
 SHOPIFY_SHOP_BASE_URL = "https://braless-butter.myshopify.com"
@@ -42,6 +43,6 @@ TIMEZONE = 'US/Eastern'
 DEFAULT_OUTPUT_FILENAME = "shopify_globo_orders.csv"
 
 # Superuser Login Configuration
-SUPERUSER_USERNAME = os.getenv("SUPERUSER_USERNAME")
-SUPERUSER_PASSWORD = os.getenv("SUPERUSER_PASSWORD")
+SUPERUSER_USERNAME=get_tiffinstash_secret("SUPERUSER_USERNAME")
+SUPERUSER_PASSWORD=get_tiffinstash_secret("SUPERUSER_PASSWORD")
 

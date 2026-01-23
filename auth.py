@@ -14,6 +14,42 @@ CACHE_FILE = "token_cache.json"
 CACHE_DURATION_HOURS = 23
 
 
+def get_tiffinstash_secret(env_name: str, creds_file: str = "/etc/tiffinstash-creds") -> Optional[str]:
+    """
+    Get secret from environment variable or mounted credentials file.
+    
+    Args:
+        env_name: Environment variable name to check
+        creds_file: Path to credentials file with KEY=VALUE format
+        
+    Returns:
+        Secret value if found, None otherwise
+    """
+    # 1. Check environment variable first
+    val = os.getenv(env_name)
+    if val:
+        return val
+    
+    # 2. Check mounted credentials file
+    if os.path.exists(creds_file):
+        try:
+            with open(creds_file, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    # Skip empty lines and comments
+                    if not line or line.startswith('#'):
+                        continue
+                    # Parse KEY=VALUE format
+                    if '=' in line:
+                        key, value = line.split('=', 1)
+                        if key.strip() == env_name:
+                            return value.strip()
+        except Exception as e:
+            print(f"⚠️ Failed to read secret from {creds_file}: {e}")
+            
+    return None
+
+
 class TokenCache:
     """Handles saving and loading the access token from a file."""
     
@@ -96,8 +132,8 @@ class ShopifyAuth:
             return cached_token
 
         # 2. If no cache, try to generate using credentials
-        client_id = client_id or os.getenv("SHOPIFY_CLIENT_ID")
-        client_secret = client_secret or os.getenv("SHOPIFY_CLIENT_SECRET")
+        client_id = client_id or get_tiffinstash_secret("SHOPIFY_CLIENT_ID")
+        client_secret = client_secret or get_tiffinstash_secret("SHOPIFY_CLIENT_SECRET")
         
         # Try to fetch new token if credentials are present
         if client_id and client_secret:
@@ -148,8 +184,8 @@ class ShopifyAuth:
         if cached_token:
             return {"access_token": cached_token, "source": "cache"}
 
-        client_id = client_id or os.getenv("SHOPIFY_CLIENT_ID")
-        client_secret = client_secret or os.getenv("SHOPIFY_CLIENT_SECRET")
+        client_id = client_id or get_tiffinstash_secret("SHOPIFY_CLIENT_ID")
+        client_secret = client_secret or get_tiffinstash_secret("SHOPIFY_CLIENT_SECRET")
         
         if not client_id or not client_secret:
              return {"error": "Missing credentials"}
