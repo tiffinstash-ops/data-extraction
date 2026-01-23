@@ -38,6 +38,7 @@ jobs:
 
       - name: Deploy to Cloud Run
         run: |
+          gcloud config set project pelagic-campus-484800-b3 --quiet
           gcloud run deploy data-extraction \
             --image=docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:latest \
             --platform=managed \
