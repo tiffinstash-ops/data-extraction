@@ -40,3 +40,8 @@ TIMEZONE = 'US/Eastern'
 
 # Default Export Settings
 DEFAULT_OUTPUT_FILENAME = "shopify_globo_orders.csv"
+
+# Superuser Login Configuration
+SUPERUSER_USERNAME = os.getenv("SUPERUSER_USERNAME")
+SUPERUSER_PASSWORD = os.getenv("SUPERUSER_PASSWORD")
+

@@ -95,44 +95,47 @@ class ShopifyAuth:
         if cached_token:
             return cached_token
 
-        # 2. If no cache, get from environment/args
+        # 2. If no cache, try to generate using credentials
         client_id = client_id or os.getenv("SHOPIFY_CLIENT_ID")
         client_secret = client_secret or os.getenv("SHOPIFY_CLIENT_SECRET")
         
-        if not client_id or not client_secret:
-            # Fallback to configured access token if no credentials
-            return os.getenv("SHOPIFY_ACCESS_TOKEN")
-        
-        # 3. Request new token
-        headers = {
-            "Content-Type": "application/x-www-form-urlencoded"
-        }
-        
-        data = {
-            "grant_type": "client_credentials",
-            "client_id": client_id,
-            "client_secret": client_secret
-        }
-        
-        try:
-            print("🔄 Fetching new access token from Shopify...")
-            response = requests.post(self.token_url, headers=headers, data=data)
-            response.raise_for_status()
-            
-            response_data = response.json()
-            access_token = response_data.get("access_token")
-            
-            if access_token:
-                # 4. Save to cache
-                TokenCache.save(access_token)
-                return access_token
-            else:
-                print("✗ No access token in response")
-                return None
+        # Try to fetch new token if credentials are present
+        if client_id and client_secret:
+            try:
+                print("🔄 Fetching new access token from Shopify...")
+                headers = {
+                    "Content-Type": "application/x-www-form-urlencoded"
+                }
                 
-        except requests.exceptions.RequestException as e:
-            print(f"✗ Error retrieving access token: {e}")
-            return None
+                data = {
+                    "grant_type": "client_credentials",
+                    "client_id": client_id,
+                    "client_secret": client_secret
+                }
+                
+                response = requests.post(self.token_url, headers=headers, data=data)
+                response.raise_for_status()
+                
+                response_data = response.json()
+                access_token = response_data.get("access_token")
+                
+                if access_token:
+                    # Save to cache and return
+                    TokenCache.save(access_token)
+                    return access_token
+                else:
+                    print("✗ No access token in response")
+                    
+            except requests.exceptions.RequestException as e:
+                print(f"✗ Error retrieving access token: {e}")
+
+        # 3. Fallback to configured access token if generation failed or credentials missing
+        fallback_token = os.getenv("SHOPIFY_ACCESS_TOKEN")
+        if fallback_token:
+            print("⚠️ Using static SHOPIFY_ACCESS_TOKEN as fallback")
+            return fallback_token
+            
+        return None
     
     def get_token_info(
         self,

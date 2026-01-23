@@ -29,6 +29,7 @@ class Order:
     """Represents a Shopify order."""
     id: str
     name: str
+    customer_name: Optional[str]
     created_at: str
     email: Optional[str]
     note: Optional[str]
@@ -56,6 +57,10 @@ class Order:
             zip=shipping_data.get('zip')
         )
         
+        # Parse customer
+        customer = node.get('customer') or {}
+        customer_name = customer.get('displayName')
+        
         # Parse line items
         line_items = []
         for li_edge in node['lineItems']['edges']:
@@ -74,6 +79,7 @@ class Order:
         return cls(
             id=node['id'],
             name=node['name'],
+            customer_name=customer_name,
             created_at=node['createdAt'],
             email=node.get('email'),
             note=node.get('note'),

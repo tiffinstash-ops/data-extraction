@@ -44,6 +44,9 @@ query GetOrders($cursor: String, $query: String) {
         name
         createdAt
         email
+        customer {
+          displayName
+        }
         note
         shippingAddress {
           phone
