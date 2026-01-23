@@ -24,8 +24,8 @@ jobs:
 
       - name: Build and Push Docker image
         run: |
-          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:latest .
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:latest
+          docker build -t docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:0.0.4 .
+          docker push docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:0.0.4
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -39,11 +39,12 @@ jobs:
         run: |
           # Prepare encoded secret for app environment variable
           ENCODED_SECRET=$(echo -n '${{ secrets.GOOGLE_SA_KEY }}' | base64 | tr -d '\n')
-          
+          gcloud config set project pelagic-campus-484800-b3 --quiet
           gcloud run deploy data-extraction \
-            --image=${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:latest \
+            --image=docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:0.0.4 \
             --platform=managed \
             --region=us-east1 \
-            --project=pelagic-campus-484800-b3 \
             --allow-unauthenticated \
-            --set-env-vars ENCODED_SECRET="$ENCODED_SECRET"
+            --port=8501 \
+            --set-env-vars ENCODED_SECRET="$ENCODED_SECRET" \
+            --quiet
