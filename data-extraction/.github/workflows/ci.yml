@@ -33,28 +33,22 @@ jobs:
           docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:latest .
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:latest
 
-      # 1. Authenticate to Google Cloud
-      # This creates the credential file and sets the active project
-      - id: 'auth'
-        name: 'Authenticate to Google Cloud'
-        uses: 'google-github-actions/auth@v2'
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v1'
         with:
-          credentials_json: '${{ secrets.GOOGLE_SA_KEY }}'
+          service_account_key: ${{ secrets.GOOGLE_SA_KEY }}
           project_id: 'pelagic-campus-484800-b3'
 
-      # 2. Set up gcloud CLI
-      # This picks up the authentication from the previous step automatically
-      - name: 'Set up Cloud SDK'
-        uses: 'google-github-actions/setup-gcloud@v2'
-
-      # 3. Deploy to Cloud Run
-      - name: 'Deploy to Cloud Run'
-        uses: 'google-github-actions/deploy-cloudrun@v2'
-        with:
-          service: 'data-extraction'
-          # Cloud Run pulls from Docker Hub here
-          image: 'index.docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:latest'
-          region: 'us-east1'
-          flags: '--allow-unauthenticated'
-          env_vars: |
-            ENCODED_SECRET=${{ env.ENCODED_SECRET }}
+      - name: Deploy to Google Cloud Run
+        run: |
+          ls
+          echo "$ENCODED_SECRET" | base64 --decode > /tmp/google_sa_key.json
+          gcloud auth activate-service-account --key-file=/tmp/google_sa_key.json
+          gcloud config set project pelagic-campus-484800-b3
+          gcloud run deploy data-extraction \
+          --image=${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:latest \
+          --platform=managed \
+          --region=us-east1 \
+          --allow-unauthenticated \
+          --set-env-vars ENCODED_SECRET="$ENCODED_SECRET"
+        shell: bash
