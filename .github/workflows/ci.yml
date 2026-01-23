@@ -1,48 +1,48 @@
-name: Run Shell Script and Docker Compose
+name: Continuous Integration and Deployment
 
 on:
   push:
     branches:
       - main
+  pull_request:
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Decode Google Service Account Key
-        run: |
-          set -x
-          ENCODED_SECRET=$(echo -n '${{ secrets.GOOGLE_SA_KEY }}' | base64 | tr -d '\n')
-          echo "ENCODED_SECRET=$ENCODED_SECRET" >> $GITHUB_ENV
-        shell: bash
+        uses: actions/checkout@v4
 
       - name: Log in to Docker Hub
-        run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
-
-      - name: Build Dashboard Docker image
-        run: |
-            docker build -t data-extraction .
-
-      - name: Tag and push Dashboard image
-        run: |
-          docker tag data-extraction:latest ${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:latest
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:latest
-
-      - name: Setup Google Cloud SDK
-        uses: google-github-actions/setup-gcloud@v1
+        uses: docker/login-action@v3
         with:
-          service_account_key: ${{ secrets.GOOGLE_SA_KEY }}
-          project_id: nxgenailab
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Deploy React app to Google Cloud Storage
+      - name: Build and Push Docker image
         run: |
+          docker build -t docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:latest .
+          docker push docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:latest
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GOOGLE_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud config set project pelagic-campus-484800-b3 --quiet
           gcloud run deploy data-extraction \
-          --image=${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:latest \
-          --platform=managed \
-          --region=us-east1 \
-          --allow-unauthenticated \
-        shell: bash
+            --image=docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:latest \
+            --platform=managed \
+            --region=us-east1 \
+            --allow-unauthenticated \
+            --port=8501 \
+            --quiet

@@ -59,9 +59,9 @@ def order_to_csv_row(order: Order, line_item: LineItem) -> Dict[str, Any]:
     globo = line_item.custom_attributes
     
     return {
-        "ORDER ID": clean(order.id),
+        "ORDER ID": clean(order.name),
         "DATE": clean(order.created_at),
-        "NAME": clean(order.name),
+        "NAME": clean(order.customer_name),
         "Shipping address phone numeric": clean(shipping.phone if shipping else None),
         "phone_edit": clean(shipping.phone if shipping else None),
         "EMAIL": clean(order.email),
