@@ -2,11 +2,15 @@
 CSV exporter for Shopify orders.
 """
 import csv
+import logging
 from typing import Optional
 from shopify_client import ShopifyClient
 from utils import create_date_filter_query, order_to_csv_row
 from constants import CSV_FIELDNAMES
 from config import SHOPIFY_URL, HEADERS, TIMEZONE, DEFAULT_OUTPUT_FILENAME
+
+# Configure logger
+logger = logging.getLogger(__name__)
 
 
 class OrderExporter:
@@ -57,10 +61,10 @@ class OrderExporter:
                     total_count += 1
                 
                 if total_count % 50 == 0:
-                    print(f"Exported {total_count} rows...")
+                    logger.info(f"Exported {total_count} rows...")
         
-        print(f"\nDone! File saved as {filename}")
-        print(f"Total rows exported: {total_count}")
+        logger.info(f"Done! File saved as {filename}")
+        logger.info(f"Total rows exported: {total_count}")
 
 
 def fetch_and_export(start_date: str, end_date: str, filename: Optional[str] = None) -> None:

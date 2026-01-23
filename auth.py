@@ -5,9 +5,13 @@ Handles OAuth token retrieval and caching.
 import os
 import json
 import time
+import logging
 import requests
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
+
+# Configure logger
+logger = logging.getLogger(__name__)
 
 # Cache file path
 CACHE_FILE = "token_cache.json"
@@ -45,7 +49,7 @@ def get_tiffinstash_secret(env_name: str, creds_file: str = "/etc/tiffinstash-cr
                         if key.strip() == env_name:
                             return value.strip()
         except Exception as e:
-            print(f"⚠️ Failed to read secret from {creds_file}: {e}")
+            logger.warning(f"Failed to read secret from {creds_file}: {e}")
             
     return None
 
@@ -64,9 +68,9 @@ class TokenCache:
         try:
             with open(CACHE_FILE, 'w') as f:
                 json.dump(data, f)
-            print(f"✓ Access token cached (valid for {CACHE_DURATION_HOURS} hours)")
+            logger.info(f"Access token cached (valid for {CACHE_DURATION_HOURS} hours)")
         except Exception as e:
-            print(f"⚠️ Failed to save token cache: {e}")
+            logger.warning(f"Failed to save token cache: {e}")
 
     @staticmethod
     def load() -> Optional[str]:
@@ -85,16 +89,16 @@ class TokenCache:
             
             # Check if token is expired
             if time.time() >= expires_at:
-                print("ℹ️ Cached token expired")
+                logger.info("Cached token expired")
                 return None
                 
             # Calculate remaining time for display
             remaining_hours = (expires_at - time.time()) / 3600
-            print(f"✓ Using cached access token (expires in {remaining_hours:.1f} hours)")
+            logger.info(f"Using cached access token (expires in {remaining_hours:.1f} hours)")
             return data.get("access_token")
             
         except Exception as e:
-            print(f"⚠️ Failed to load token cache: {e}")
+            logger.warning(f"Failed to load token cache: {e}")
             return None
 
 
@@ -135,10 +139,14 @@ class ShopifyAuth:
         client_id = client_id or get_tiffinstash_secret("SHOPIFY_CLIENT_ID")
         client_secret = client_secret or get_tiffinstash_secret("SHOPIFY_CLIENT_SECRET")
         
+        # Confirm credentials were loaded
+        if client_id and client_secret:
+            logger.info("SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET successfully loaded from mounted secret")
+        
         # Try to fetch new token if credentials are present
         if client_id and client_secret:
             try:
-                print("🔄 Fetching new access token from Shopify...")
+                logger.info("Fetching new access token from Shopify...")
                 headers = {
                     "Content-Type": "application/x-www-form-urlencoded"
                 }
@@ -160,15 +168,15 @@ class ShopifyAuth:
                     TokenCache.save(access_token)
                     return access_token
                 else:
-                    print("✗ No access token in response")
+                    logger.error("No access token in response")
                     
             except requests.exceptions.RequestException as e:
-                print(f"✗ Error retrieving access token: {e}")
+                logger.error(f"Error retrieving access token: {e}")
 
         # 3. Fallback to configured access token if generation failed or credentials missing
         fallback_token = os.getenv("SHOPIFY_ACCESS_TOKEN")
         if fallback_token:
-            print("⚠️ Using static SHOPIFY_ACCESS_TOKEN as fallback")
+            logger.warning("Using static SHOPIFY_ACCESS_TOKEN as fallback")
             return fallback_token
             
         return None

@@ -3,10 +3,14 @@ Shopify API client for fetching orders.
 """
 import requests
 import time
+import logging
 from typing import Dict, List, Optional, Generator
 from models import Order
 from constants import ORDERS_QUERY
 from config import HEADERS, API_DELAY_SECONDS
+
+# Configure logger
+logger = logging.getLogger(__name__)
 
 
 class ShopifyClient:
@@ -45,7 +49,7 @@ class ShopifyClient:
             )
             
             if response.status_code != 200:
-                print(f"Error: {response.text}")
+                logger.error(f"API request failed: {response.text}")
                 break
             
             data = response.json().get('data', {}).get('orders', {})
