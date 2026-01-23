@@ -8,6 +8,9 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
 
     steps:
       - name: Checkout code
@@ -15,7 +18,6 @@ jobs:
 
       - name: Prepare Application Secrets
         run: |
-          # Encode the key for the application env var
           ENCODED_SECRET=$(echo -n '${{ secrets.GOOGLE_SA_KEY }}' | base64 | tr -d '\n')
           echo "ENCODED_SECRET=$ENCODED_SECRET" >> $GITHUB_ENV
         shell: bash
@@ -32,7 +34,7 @@ jobs:
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:latest
 
       # 1. Authenticate to Google Cloud
-      # Adding project_id here tells gcloud which project is "active"
+      # This creates the credential file and sets the active project
       - id: 'auth'
         name: 'Authenticate to Google Cloud'
         uses: 'google-github-actions/auth@v2'
@@ -40,8 +42,8 @@ jobs:
           credentials_json: '${{ secrets.GOOGLE_SA_KEY }}'
           project_id: 'pelagic-campus-484800-b3'
 
-      # 2. Initialize the gcloud CLI
-      # This step explicitly sets up the 'active account' that was missing
+      # 2. Set up gcloud CLI
+      # This picks up the authentication from the previous step automatically
       - name: 'Set up Cloud SDK'
         uses: 'google-github-actions/setup-gcloud@v2'
 
@@ -50,7 +52,7 @@ jobs:
         uses: 'google-github-actions/deploy-cloudrun@v2'
         with:
           service: 'data-extraction'
-          # Ensure your Docker Hub repo is PUBLIC or Cloud Run won't be able to pull this
+          # Cloud Run pulls from Docker Hub here
           image: 'index.docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:latest'
           region: 'us-east1'
           flags: '--allow-unauthenticated'
