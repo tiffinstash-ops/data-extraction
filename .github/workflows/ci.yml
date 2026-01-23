@@ -45,5 +45,4 @@ jobs:
             --region=us-east1 \
             --allow-unauthenticated \
             --port=8501 \
-            --update-secrets=/etc/tiffinstash-creds=tiffinstash-creds:latest \
             --quiet
