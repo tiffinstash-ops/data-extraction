@@ -2,6 +2,7 @@
 import streamlit as st
 import requests
 import os
+import certifi
 import json
 
 # Set up the page
@@ -39,7 +40,7 @@ if client_id_input and client_secret_input:
         st.toast("Sending request to Shopify...", icon="🚀")
         
         try:
-            response = requests.post(token_url, json=payload)
+            response = requests.post(token_url, json=payload, verify=certifi.where())
             
             st.markdown("**Response Status Code:**")
             st.code(response.status_code)
