@@ -8,7 +8,7 @@ import io
 import os
 from functools import partial
 from shopify_client import ShopifyClient
-from auth import get_shopify_access_token
+from auth import get_shopify_access_token, TokenCache
 from config import SHOPIFY_URL, SHOPIFY_SHOP_BASE_URL, ACCESS_TOKEN, update_access_token, SUPERUSER_USERNAME, SUPERUSER_PASSWORD
 from utils import create_date_filter_query, order_to_csv_row
 from constants import CSV_FIELDNAMES
@@ -85,8 +85,8 @@ def initialize_session_state():
         st.session_state.authenticated = False
     
     if 'access_token' not in st.session_state:
-        # Try to get token immediately (cache or env)
-        token = get_shopify_access_token(SHOPIFY_SHOP_BASE_URL)
+        # Try to get token from cache (fast, non-blocking)
+        token = TokenCache.load()
         st.session_state.access_token = token if token else ACCESS_TOKEN
         
         # Auto-authenticate if we found a token
@@ -319,12 +319,12 @@ def render_sidebar():
                 help="Enter your Shopify access token manually if auto-auth fails"
             )
             
-            if st.button("Authenticate"):
+            if st.button("Authenticate", key="manual_auth_btn"):
                 if manual_token:
                     st.session_state.access_token = manual_token
                 
                 if authenticate():
-                    st.success("✓ Must be authenticated!")
+                    st.success("✓ Authenticated!")
                     st.rerun()
                 else:
                     st.error("✗ Authentication failed.")
@@ -351,21 +351,20 @@ def render_main_content():
     """Render the main content area with date pickers and fetch button."""
     # Check auth
     if not st.session_state.authenticated:
-        st.info("⏳ Attempting to auto-authenticate...")
-        if authenticate():
-             st.rerun()
-             
-        st.warning("⚠️ Could not automatically authenticate.")
         st.markdown("""
-        ### 📋 Setup Instructions
+        ### 👋 Welcome to Shopify Order Exporter
         
-        To use this app, you need to authenticate. The app tries to do this automatically using:
-        
-        1. **Cached Token**: Valid for 23 hours.
-        2. **OAuth Credentials**: `SHOPIFY_CLIENT_ID` and `SHOPIFY_CLIENT_SECRET` environment variables.
-        
-        If these are not set, please enter an access token manually in the sidebar.
+        Please authenticate to continue. You can:
+        1. **Enter an Access Token** manually in the sidebar (👈).
+        2. **Log in with Credentials** using the button below.
         """)
+        
+        if st.button("🔐 Login with Configured Credentials"):
+             if authenticate():
+                 st.rerun()
+             else:
+                 st.error("Authentication failed. Please check credentials or use manual token.")
+        
         return
 
     # Date range selection
