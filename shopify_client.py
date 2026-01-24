@@ -2,6 +2,7 @@
 Shopify API client for fetching orders.
 """
 import requests
+import certifi
 import time
 import logging
 from typing import Dict, List, Optional, Generator
@@ -45,7 +46,8 @@ class ShopifyClient:
             response = requests.post(
                 self.url,
                 json={'query': ORDERS_QUERY, 'variables': variables},
-                headers=self.headers
+                headers=self.headers,
+                verify=certifi.where()
             )
             
             if response.status_code != 200:
