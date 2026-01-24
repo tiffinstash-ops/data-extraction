@@ -7,6 +7,7 @@ import json
 import time
 import logging
 import requests
+import certifi
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 
@@ -209,7 +210,7 @@ class ShopifyAuth:
         }
         
         try:
-            response = requests.post(self.token_url, headers=headers, data=data)
+            response = requests.post(self.token_url, headers=headers, data=data, verify=certifi.where())
             result = response.json()
             if "access_token" in result:
                 TokenCache.save(result["access_token"])
