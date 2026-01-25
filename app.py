@@ -13,6 +13,7 @@ from config import SHOPIFY_URL, SHOPIFY_SHOP_BASE_URL, ACCESS_TOKEN, update_acce
 from utils import create_date_filter_query, order_to_csv_row
 from constants import CSV_FIELDNAMES
 from transformations import apply_all_transformations
+from export_transformations import run_post_edit_transformations
 
 # Page configuration
 st.set_page_config(
@@ -100,6 +101,9 @@ def initialize_session_state():
     if 'superuser_authenticated' not in st.session_state:
         st.session_state.superuser_authenticated = False
 
+    if 'processed_data' not in st.session_state:
+        st.session_state.processed_data = None
+
 
 def authenticate():
     """Handle authentication."""
@@ -152,7 +156,7 @@ def fetch_orders(start_date: str, end_date: str) -> pd.DataFrame:
             df[col] = df[col].astype(str)
             
     # Apply transformations
-    # df = apply_all_transformations(df)
+    df = apply_all_transformations(df)
             
     return df
 
@@ -241,8 +245,7 @@ def display_orders(df: pd.DataFrame, start_date, end_date):
     with col2:
         show_columns = st.multiselect(
             "Select Columns to Display",
-            options=df.columns.tolist(),
-            default=df.columns.tolist()[:5] # Default show first 5
+            options=df.columns.tolist()
         )
     
     # Filter dataframe based on search
@@ -258,17 +261,69 @@ def display_orders(df: pd.DataFrame, start_date, end_date):
     else:
         display_df = filtered_df
     
+    # Transformation Actions
+    st.subheader("🛠️ Data Actions")
+    action_col1, action_col2, action_col3 = st.columns([1, 1, 2])
+
     # Display dataframe
-    st.dataframe(
+    edited_df = st.data_editor(
         display_df,
         use_container_width=True, 
-        height=500
+        height=500,
+        key=f"editor_{start_date}_{end_date}"
     )
+    
+    # Sync edits back to session state if changed
+    if not edited_df.equals(display_df):
+        st.session_state.orders_data.update(edited_df)
+        st.rerun()
     
     st.info(f"Showing {len(filtered_df)} of {len(df)} total line items")
     
-    # Export options
-    st.header("💾 Export Data")
+    # Post-processing button
+    st.divider()
+    st.header("⚙️ Post-Edit Transformations")
+    
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col1:
+        if st.button("🚀 Export Data Transformations", use_container_width=True):
+            with st.spinner("Running transformations & expanding subscriptions..."):
+                try:
+                    processed = run_post_edit_transformations(st.session_state.orders_data)
+                    st.session_state.processed_data = processed
+                    st.success("Transformations complete!")
+                except Exception as e:
+                    st.error(f"Error during transform: {e}")
+
+    # Display processed data if available
+    if st.session_state.processed_data is not None:
+        st.header("📋 Final Export Data")
+        st.dataframe(st.session_state.processed_data, use_container_width=True, height=500)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            csv_buffer = io.StringIO()
+            st.session_state.processed_data.to_csv(csv_buffer, index=False)
+            st.download_button(
+                label="📥 Download Final CSV",
+                data=csv_buffer.getvalue(),
+                file_name=f"processed_orders_{start_date}_{end_date}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        with col2:
+            excel_buffer = io.BytesIO()
+            st.session_state.processed_data.to_excel(excel_buffer, index=False, engine='openpyxl')
+            st.download_button(
+                label="📥 Download Final Excel",
+                data=excel_buffer.getvalue(),
+                file_name=f"processed_orders_{start_date}_{end_date}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+
+    # Export options (for raw/edited data)
+    st.header("💾 Download Raw/Edited Data")
     
     col1, col2 = st.columns(2)
     
@@ -406,6 +461,7 @@ def render_main_content():
                     end_date.strftime("%Y-%m-%d")
                 )
                 st.session_state.orders_data = df
+                st.session_state.processed_data = None
             except Exception as e:
                 st.error(f"❌ Error fetching orders: {str(e)}")
                 return
