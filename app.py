@@ -8,7 +8,7 @@ import io
 import os
 from functools import partial
 from src.core.shopify_client import ShopifyClient
-from src.core.auth import get_shopify_access_token, save_superuser_session, load_superuser_session
+from src.core.auth import get_shopify_access_token
 from src.utils.config import SHOPIFY_URL, SHOPIFY_SHOP_BASE_URL, ACCESS_TOKEN, update_access_token, SUPERUSER_USERNAME, SUPERUSER_PASSWORD
 from src.utils.utils import create_date_filter_query, order_to_csv_row
 from src.utils.constants import CSV_FIELDNAMES
@@ -100,8 +100,7 @@ def initialize_session_state():
         st.session_state.orders_data = None
         
     if 'superuser_authenticated' not in st.session_state:
-        # Try to load from local cache if not set in session
-        st.session_state.superuser_authenticated = load_superuser_session()
+        st.session_state.superuser_authenticated = False
 
     if 'processed_data' not in st.session_state:
         st.session_state.processed_data = None
@@ -569,7 +568,6 @@ def check_superuser_auth():
                 
             if username == SUPERUSER_USERNAME and password == SUPERUSER_PASSWORD:
                 st.session_state.superuser_authenticated = True
-                save_superuser_session(True)
                 st.success("Login successful!")
                 st.rerun()
             else:

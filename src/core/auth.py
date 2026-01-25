@@ -244,35 +244,16 @@ def get_shopify_access_token(shop_url: str) -> Optional[str]:
 
 
 def save_superuser_session(authenticated: bool):
-    """Save the superuser authentication state to the cache file."""
-    try:
-        data = {}
-        if os.path.exists(CACHE_FILE):
-            with open(CACHE_FILE, 'r') as f:
-                data = json.load(f)
-        
-        data["SUPERUSER_AUTHENTICATED"] = authenticated
-        # Set an expiry for the session (e.g., 12 hours)
-        data["SUPERUSER_SESSION_EXPIRES"] = time.time() + (12 * 3600) if authenticated else 0
-        
-        with open(CACHE_FILE, 'w') as f:
-            json.dump(data, f, indent=4)
-    except Exception as e:
-        logger.warning(f"Failed to save superuser session: {e}")
+    """
+    Deprecated: Superuser session is now handled strictly in Streamlit's 
+    per-user session_state to prevent cross-user authentication sharing.
+    """
+    pass
 
 
 def load_superuser_session() -> bool:
-    """Load and validate the superuser authentication state from the cache file."""
-    try:
-        if os.path.exists(CACHE_FILE):
-            with open(CACHE_FILE, 'r') as f:
-                data = json.load(f)
-                
-            is_auth = data.get("SUPERUSER_AUTHENTICATED", False)
-            expires = data.get("SUPERUSER_SESSION_EXPIRES", 0)
-            
-            if is_auth and time.time() < expires:
-                return True
-    except Exception as e:
-        logger.warning(f"Failed to load superuser session: {e}")
+    """
+    Deprecated: Superuser session is now handled strictly in Streamlit's 
+    per-user session_state.
+    """
     return False
