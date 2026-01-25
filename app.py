@@ -7,13 +7,13 @@ from datetime import datetime, timedelta
 import io
 import os
 from functools import partial
-from shopify_client import ShopifyClient
-from auth import get_shopify_access_token
-from config import SHOPIFY_URL, SHOPIFY_SHOP_BASE_URL, ACCESS_TOKEN, update_access_token, SUPERUSER_USERNAME, SUPERUSER_PASSWORD
-from utils import create_date_filter_query, order_to_csv_row
-from constants import CSV_FIELDNAMES
-from transformations import apply_all_transformations
-from export_transformations import run_post_edit_transformations
+from src.core.shopify_client import ShopifyClient
+from src.core.auth import get_shopify_access_token
+from src.utils.config import SHOPIFY_URL, SHOPIFY_SHOP_BASE_URL, ACCESS_TOKEN, update_access_token, SUPERUSER_USERNAME, SUPERUSER_PASSWORD
+from src.utils.utils import create_date_filter_query, order_to_csv_row
+from src.utils.constants import CSV_FIELDNAMES
+from src.processing.transformations import apply_all_transformations
+from src.processing.export_transformations import run_post_edit_transformations
 
 # Page configuration
 st.set_page_config(
@@ -164,7 +164,7 @@ def fetch_orders(start_date: str, end_date: str) -> pd.DataFrame:
 def load_sellers():
     """Load sellers from local CSV file."""
     try:
-        csv_path = os.path.join(os.path.dirname(__file__), 'seller-info.csv')
+        csv_path = os.path.join(os.path.dirname(__file__), 'data', 'seller-info.csv')
         df = pd.read_csv(csv_path)
         return df
     except Exception as e:

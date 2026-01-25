@@ -2,7 +2,7 @@
 Configuration settings for Shopify API integration.
 """
 import os
-from auth import get_tiffinstash_secret
+from src.core.auth import get_tiffinstash_secret
 
 # Shopify Shop Configuration
 SHOPIFY_SHOP_BASE_URL = "https://braless-butter.myshopify.com"

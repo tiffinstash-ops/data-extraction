@@ -3,10 +3,10 @@ Main script to export Shopify orders to CSV.
 """
 import os
 import logging
-from logger_config import setup_logging
-from exporter import fetch_and_export
-from auth import get_shopify_access_token
-from config import ACCESS_TOKEN, SHOPIFY_SHOP_BASE_URL, update_access_token
+from src.utils.logger_config import setup_logging
+from scripts.exporter import fetch_and_export
+from src.core.auth import get_shopify_access_token
+from src.utils.config import ACCESS_TOKEN, SHOPIFY_SHOP_BASE_URL, update_access_token
 
 # Configure logger
 logger = logging.getLogger(__name__)
