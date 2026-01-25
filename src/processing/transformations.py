@@ -46,6 +46,27 @@ def findCity(df: pd.DataFrame) -> pd.DataFrame:
     df['Delivery city'] = df.apply(get_row_city, axis=1)
     return df
 
+def consolidateDeliveryTimes(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Accumulate data from multiple delivery time columns into 'deliverytime_edit'.
+    Checks columns in order and takes the first non-zero/non-empty value.
+    """
+    time_cols = [
+        'Delivery Time', 'Dinner Delivery', 'Lunch Delivery', 
+        'Lunch Delivery Time', 'Lunch Time', 'Delivery between'
+    ]
+    
+    def get_first_valid(row):
+        for col in time_cols:
+            val = str(row.get(col, '0')).strip()
+            # If value is truthy and not just a zero-placeholder
+            if val and val not in ['0', '0.0', 'None', 'nan', '']:
+                return val
+        return ""
+        
+    df['deliverytime_edit'] = df.apply(get_first_valid, axis=1)
+    return df
+
 def apply_all_transformations(df: pd.DataFrame) -> pd.DataFrame:
     df = removeRowsWithBlankSKU(df)
     df = updateColumnDeliveryInstructionsforDrivers(df)
@@ -53,4 +74,5 @@ def apply_all_transformations(df: pd.DataFrame) -> pd.DataFrame:
     df = fillZeros(df)
     df = highlightMismatchedDeliveryCity(df)
     df = findCity(df)
+    df = consolidateDeliveryTimes(df)
     return df

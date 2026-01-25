@@ -35,7 +35,17 @@ def get_tiffinstash_secret(env_name: str, creds_file: str = "/etc/tiffinstash-cr
     if val:
         return val
     
-    # 2. Check mounted credentials file
+    # 2. Check CACHE_FILE (token_cache.json)
+    try:
+        if os.path.exists(CACHE_FILE):
+            with open(CACHE_FILE, 'r') as f:
+                data = json.load(f)
+                if env_name in data:
+                    return data[env_name]
+    except Exception as e:
+        logger.debug(f"Failed to read {env_name} from {CACHE_FILE}: {e}")
+
+    # 3. Check mounted credentials file
     if os.path.exists(creds_file):
         try:
             with open(creds_file, "r") as f:
@@ -231,3 +241,38 @@ def get_shopify_access_token(shop_url: str) -> Optional[str]:
     """
     auth = ShopifyAuth(shop_url)
     return auth.get_access_token()
+
+
+def save_superuser_session(authenticated: bool):
+    """Save the superuser authentication state to the cache file."""
+    try:
+        data = {}
+        if os.path.exists(CACHE_FILE):
+            with open(CACHE_FILE, 'r') as f:
+                data = json.load(f)
+        
+        data["SUPERUSER_AUTHENTICATED"] = authenticated
+        # Set an expiry for the session (e.g., 12 hours)
+        data["SUPERUSER_SESSION_EXPIRES"] = time.time() + (12 * 3600) if authenticated else 0
+        
+        with open(CACHE_FILE, 'w') as f:
+            json.dump(data, f, indent=4)
+    except Exception as e:
+        logger.warning(f"Failed to save superuser session: {e}")
+
+
+def load_superuser_session() -> bool:
+    """Load and validate the superuser authentication state from the cache file."""
+    try:
+        if os.path.exists(CACHE_FILE):
+            with open(CACHE_FILE, 'r') as f:
+                data = json.load(f)
+                
+            is_auth = data.get("SUPERUSER_AUTHENTICATED", False)
+            expires = data.get("SUPERUSER_SESSION_EXPIRES", 0)
+            
+            if is_auth and time.time() < expires:
+                return True
+    except Exception as e:
+        logger.warning(f"Failed to load superuser session: {e}")
+    return False

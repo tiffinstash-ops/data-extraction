@@ -164,9 +164,36 @@ def expand_subscriptions(df: pd.DataFrame) -> pd.DataFrame:
             new_rows.append(expanded_row)
     return pd.DataFrame(new_rows, columns=EXPORT_COLUMNS)
 
+def update_clabl_and_upstair(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Logic from updateColumnQ Apps Script:
+    1. If 'SELLER NOTE' is not empty/0, set 'CLABL' to firstName + truncated lastName (3 chars).
+    2. If 'UPSTAIR' is empty or '0', set it to 'No'.
+    """
+    def format_name(name):
+        if not name or not isinstance(name, str):
+            return ""
+        parts = name.split()
+        first = parts[0] if len(parts) > 0 else ""
+        last = parts[1][:3] if len(parts) > 1 else ""
+        return f"{first} {last}".strip()
+
+    if 'SELLER NOTE' in df.columns and 'NAME' in df.columns:
+        # Check for non-empty and non-zero
+        mask = (df['SELLER NOTE'].astype(str).str.strip() != "") & (df['SELLER NOTE'].astype(str) != "0")
+        df.loc[mask, 'CLABL'] = df.loc[mask, 'NAME'].apply(format_name)
+
+    if 'UPSTAIR' in df.columns:
+        # Check for empty or '0'
+        upstair_mask = (df['UPSTAIR'].astype(str).str.strip() == "") | (df['UPSTAIR'].astype(str) == "0")
+        df.loc[upstair_mask, 'UPSTAIR'] = 'No'
+    
+    return df
+
 def run_post_edit_transformations(df: pd.DataFrame) -> pd.DataFrame:
     """Run Phase 2 (Export Mapping) and Phase 3 (Expansion) transforms."""
     df = create_export_dataframe(df)
     df = convert_time_ranges_and_add_suffixes(df)
     df = expand_subscriptions(df)
+    df = update_clabl_and_upstair(df)
     return df

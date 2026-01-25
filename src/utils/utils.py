@@ -72,7 +72,7 @@ def order_to_csv_row(order: Order, line_item: LineItem) -> Dict[str, Any]:
         "ZIP": clean(shipping.zip if shipping else None),
         "SKU": clean(line_item.sku),
         "Delivery Instructions (for drivers)": clean(globo.get('Delivery Instructions (for drivers)')),
-        "Order Instructions (for sellers)": clean(order.note),
+        "Order Instructions (for sellers)": clean(globo.get('Order Instructions (for sellers)')),
         "Delivery Time": clean(globo.get('Delivery Time')),
         "Dinner Delivery": clean(globo.get('Dinner Delivery')),
         "Lunch Delivery": clean(globo.get('Lunch Delivery')),
