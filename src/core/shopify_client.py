@@ -6,9 +6,9 @@ import certifi
 import time
 import logging
 from typing import Dict, List, Optional, Generator
-from models import Order
-from constants import ORDERS_QUERY
-from config import HEADERS, API_DELAY_SECONDS
+from src.core.models import Order
+from src.utils.constants import ORDERS_QUERY
+from src.utils.config import HEADERS, API_DELAY_SECONDS
 
 # Configure logger
 logger = logging.getLogger(__name__)

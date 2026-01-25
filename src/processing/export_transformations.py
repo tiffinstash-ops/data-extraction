@@ -1,6 +1,6 @@
 import pandas as pd
 from datetime import timedelta
-from constants import CSV_FIELDNAMES
+from src.utils.constants import CSV_FIELDNAMES
 
 # Source Column Mapping (based on CSV_FIELDNAMES index)
 IDX_ORDER_ID = 0

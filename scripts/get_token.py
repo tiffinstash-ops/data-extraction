@@ -4,8 +4,8 @@ Run this script to get your access token using OAuth client credentials.
 """
 import os
 import logging
-from auth import ShopifyAuth
-from config import SHOPIFY_SHOP_BASE_URL
+from src.core.auth import ShopifyAuth
+from src.utils.config import SHOPIFY_SHOP_BASE_URL
 
 # Configure logger
 logger = logging.getLogger(__name__)

@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from find_city import get_city_from_address
+from src.processing.find_city import get_city_from_address
 
 def removeRowsWithBlankSKU(df: pd.DataFrame) -> pd.DataFrame:
     df = df[df['SKU'].astype(str).str.strip() != '']

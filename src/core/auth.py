@@ -15,7 +15,7 @@ from typing import Optional, Dict, Any
 logger = logging.getLogger(__name__)
 
 # Cache file path
-CACHE_FILE = "token_cache.json"
+CACHE_FILE = "data/token_cache.json"
 CACHE_DURATION_HOURS = 23
 
 
