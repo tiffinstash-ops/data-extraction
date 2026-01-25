@@ -103,6 +103,9 @@ def initialize_session_state():
 
     if 'processed_data' not in st.session_state:
         st.session_state.processed_data = None
+        
+    if 'current_filter' not in st.session_state:
+        st.session_state.current_filter = None
 
 
 def authenticate():
@@ -172,10 +175,22 @@ def load_sellers():
         return pd.DataFrame(columns=['Seller', 'Address'])
 
 
-def display_orders(df: pd.DataFrame, start_date, end_date):
+def display_orders(df: pd.DataFrame, start_date, end_date, sku_filter=None):
     """Display the orders metrics, table, and export options."""
+    # Apply seller-specific SKU filter if provided
+    if sku_filter:
+        # Try to find SKU column
+        sku_col = None
+        for c in ['SKU', 'L', 'J']:
+            if c in df.columns:
+                sku_col = c
+                break
+        
+        if sku_col:
+            df = df[df[sku_col].astype(str).str.contains(sku_filter, case=False, na=False)].copy()
+            
     if len(df) == 0:
-        st.warning("No orders found for the selected date range.")
+        st.warning(f"No orders found{' for ' + sku_filter if sku_filter else ''} for the selected date range.")
         return
     
     # Metrics
@@ -289,7 +304,8 @@ def display_orders(df: pd.DataFrame, start_date, end_date):
         if st.button("🚀 Export Data Transformations", use_container_width=True):
             with st.spinner("Running transformations & expanding subscriptions..."):
                 try:
-                    processed = run_post_edit_transformations(st.session_state.orders_data)
+                    # Use the filtered df (specific to seller) instead of full session state
+                    processed = run_post_edit_transformations(df)
                     st.session_state.processed_data = processed
                     st.success("Transformations complete!")
                 except Exception as e:
@@ -301,13 +317,17 @@ def display_orders(df: pd.DataFrame, start_date, end_date):
         st.dataframe(st.session_state.processed_data, use_container_width=True, height=500)
         
         col1, col2 = st.columns(2)
+        
+        # Add filter to filename if present
+        file_suffix = f"_{sku_filter}" if sku_filter else ""
+        
         with col1:
             csv_buffer = io.StringIO()
             st.session_state.processed_data.to_csv(csv_buffer, index=False)
             st.download_button(
                 label="📥 Download Final CSV",
                 data=csv_buffer.getvalue(),
-                file_name=f"processed_orders_{start_date}_{end_date}.csv",
+                file_name=f"processed_orders{file_suffix}_{start_date}_{end_date}.csv",
                 mime="text/csv",
                 use_container_width=True
             )
@@ -317,7 +337,7 @@ def display_orders(df: pd.DataFrame, start_date, end_date):
             st.download_button(
                 label="📥 Download Final Excel",
                 data=excel_buffer.getvalue(),
-                file_name=f"processed_orders_{start_date}_{end_date}.xlsx",
+                file_name=f"processed_orders{file_suffix}_{start_date}_{end_date}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
@@ -402,8 +422,12 @@ def render_sidebar():
         st.text(f"API Version: 2026-01")
 
 
-def render_main_content():
+def render_main_content(sku_filter=None):
     """Render the main content area with date pickers and fetch button."""
+    # Reset processed data if we switched between different filters (seller pages)
+    if 'current_filter' in st.session_state and st.session_state.current_filter != sku_filter:
+        st.session_state.current_filter = sku_filter
+        st.session_state.processed_data = None
     # Check auth
     if not st.session_state.authenticated:
         st.info("⏳ Attempting to auto-authenticate...")
@@ -468,7 +492,7 @@ def render_main_content():
     
     # Display results
     if st.session_state.orders_data is not None:
-        display_orders(st.session_state.orders_data, start_date, end_date)
+        display_orders(st.session_state.orders_data, start_date, end_date, sku_filter=sku_filter)
 
 
 def check_superuser_auth():
@@ -523,8 +547,23 @@ def seller_page(seller_name, address):
     
     render_sidebar()
     
+    # Determine SKU filter based on seller
+    sku_filter = None
+    name_lower = seller_name.lower()
+    
+    if "shriji" in name_lower:
+        sku_filter = "SRIJI"
+    elif "angithi" in name_lower or "indian" in name_lower:
+        sku_filter = "ANGTH"
+    elif "joshi" in name_lower or "jain" in name_lower:
+        sku_filter = "JOSHI"
+    elif "swad" in name_lower:
+        sku_filter = "TSWAD"
+    elif "krishna" in name_lower:
+        sku_filter = "KRISK"
+    
     # Reuse the same main content logic (Date pickers, Fetch, Display) called "processed data"
-    render_main_content()
+    render_main_content(sku_filter=sku_filter)
 
 
 def main():
