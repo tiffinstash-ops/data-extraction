@@ -25,8 +25,8 @@ jobs:
 
       - name: Build and Push Docker image
         run: |
-          docker build -t docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:latest .
-          docker push docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:latest
+          docker build -t docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:0.0.2 .
+          docker push docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:0.0.2
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -40,7 +40,7 @@ jobs:
         run: |
           gcloud config set project pelagic-campus-484800-b3 --quiet
           gcloud run deploy data-extraction \
-            --image=docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:latest \
+            --image=docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:0.0.2 \
             --platform=managed \
             --region=us-east1 \
             --allow-unauthenticated \

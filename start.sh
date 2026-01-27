@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Shopify Order Exporter - Quick Start Script
+# Daily Orders Data - Quick Start Script
 
-echo "🛍️  Shopify Order Exporter"
+echo "🛍️  Daily Orders Data"
 echo "=========================="
 echo ""
 

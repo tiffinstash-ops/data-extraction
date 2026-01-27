@@ -1,4 +1,4 @@
-# Shopify Order Exporter
+# Daily Orders Data
 
 A Python application to export Shopify orders with custom attributes (Globo) to CSV format.
 

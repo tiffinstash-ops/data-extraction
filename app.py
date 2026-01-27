@@ -19,7 +19,7 @@ from src.deliveries.deliveries_page import deliveries_page
 
 # Page configuration
 st.set_page_config(
-    page_title="Shopify Order Exporter",
+    page_title="Daily Orders Data",
     page_icon="🛍️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -429,7 +429,7 @@ def dashboard_page():
     if not check_superuser_auth():
         return
 
-    st.title("🛍️ Shopify Order Exporter")
+    st.title("🛍️ Daily Orders Data")
     st.markdown("Export and analyze your Shopify orders with custom date ranges")
     
     render_sidebar()
@@ -550,8 +550,8 @@ def main():
     
     # Define pages
     pages = [
-        st.Page(dashboard_page, title="Home", icon="🏠", url_path="dashboard"),
-        st.Page(deliveries_page, title="Deliveries", icon="🚚", url_path="deliveries")
+        st.Page(dashboard_page, title="Daily Orders Data", icon="🏠", url_path="daily-orders-data"),
+        st.Page(deliveries_page, title="Delivery Management", icon="🚚", url_path="delivery-management")
     ]
     
     for _, row in sellers_df.iterrows():

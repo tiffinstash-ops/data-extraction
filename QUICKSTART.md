@@ -1,4 +1,4 @@
-# Shopify Order Exporter - Quick Start Guide
+# Daily Orders Data - Quick Start Guide
 
 ## 🚀 Running the Streamlit App
 

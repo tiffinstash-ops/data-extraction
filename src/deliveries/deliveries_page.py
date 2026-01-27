@@ -1,6 +1,7 @@
 import streamlit as st
 import sqlalchemy
 import pandas as pd
+import os
 from sqlalchemy import create_engine, text
 from datetime import datetime, timedelta
 from google.cloud.sql.connector import Connector, IPTypes
@@ -11,7 +12,7 @@ DB_USER = "postgres"
 DB_PASS = "tiffinstash2026"
 DB_NAME = "postgres"
 INSTANCE_CONNECTION_NAME = "pelagic-campus-484800-b3:us-central1:tiffinstash-master" 
-KEY_PATH = "/Users/deepshah/Downloads/tiffinstash-key.json"
+KEY_PATH = "/etc/tiffinstash-sa-key" if os.path.exists("/etc/tiffinstash-sa-key") else "/Users/deepshah/Downloads/tiffinstash-key.json"
 
 def get_engine():
     """Create and return SQLAlchemy engine using Cloud SQL Connector."""
@@ -32,7 +33,7 @@ def get_engine():
 
 def deliveries_page():
     """Deliveries dashboard page for PostgreSQL live sync."""
-    st.title("🚚 Deliveries Management")
+    st.title("🚚 Delivery Management")
     st.markdown("View and edit delivery schedules synced directly with Cloud SQL.")
 
     # 1. Credentials & Engine
