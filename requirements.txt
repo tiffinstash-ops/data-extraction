@@ -6,3 +6,5 @@ openpyxl>=3.1.0
 streamlit==1.53.0
 googlemaps==4.10.0
 dotenv==0.9.9
+cloud-sql-python-connector[pg8000]
+sqlalchemy==2.0.46

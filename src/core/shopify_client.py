@@ -51,7 +51,10 @@ class ShopifyClient:
             )
             
             if response.status_code != 200:
-                logger.error(f"API request failed: {response.text}")
+                error_msg = response.text
+                logger.error(f"API request failed: {error_msg}")
+                if response.status_code == 401 or "Invalid API key" in error_msg:
+                    raise PermissionError(f"Shopify authentication failed: {error_msg}")
                 break
             
             data = response.json().get('data', {}).get('orders', {})

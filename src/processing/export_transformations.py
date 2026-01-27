@@ -34,7 +34,8 @@ EXPORT_COLUMNS = [
     " ", "  ", "   ", "    ", "     ", "      ", # 6 Empty columns (K-P)
     "CLABL", "LABEL", "DRIVER NOTE", "SELLER NOTE", "UPSTAIR", "DELIVERY TIME", "QUANTITY",
     "       ", "        ", # 2 Empty columns (X-Y)
-    "START DATE" # Z
+    "START DATE", # Z
+    "City Mismatch"
 ]
 
 def create_export_dataframe(source_df: pd.DataFrame) -> pd.DataFrame:
@@ -65,7 +66,8 @@ def create_export_dataframe(source_df: pd.DataFrame) -> pd.DataFrame:
             "DELIVERY TIME": get_val(row, IDX_DELIVERY_TIME_EDIT),
             "QUANTITY": get_val(row, IDX_QUANTITY),
             "       ": "", "        ": "",
-            "START DATE": get_val(row, IDX_SELECT_START_DATE)
+            "START DATE": get_val(row, IDX_SELECT_START_DATE),
+            "City Mismatch": row.get("City Mismatch", "")
         }
         new_data.append(new_row)
     return pd.DataFrame(new_data, columns=EXPORT_COLUMNS)

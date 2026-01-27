@@ -112,6 +112,16 @@ class TokenCache:
             logger.warning(f"Failed to load token cache: {e}")
             return None
 
+    @staticmethod
+    def clear():
+        """Remove the cache file."""
+        if os.path.exists(CACHE_FILE):
+            try:
+                os.remove(CACHE_FILE)
+                logger.info("Access token cache cleared")
+            except Exception as e:
+                logger.warning(f"Failed to clear token cache: {e}")
+
 
 class ShopifyAuth:
     """Handles Shopify OAuth authentication."""
@@ -229,16 +239,20 @@ class ShopifyAuth:
             return {"error": str(e)}
 
 
-def get_shopify_access_token(shop_url: str) -> Optional[str]:
+def get_shopify_access_token(shop_url: str, force_refresh: bool = False) -> Optional[str]:
     """
     Convenience function to get Shopify access token.
     
     Args:
         shop_url: Base Shopify shop URL
+        force_refresh: Whether to ignore cache and fetch a new token
         
     Returns:
         Access token string if successful, None otherwise
     """
+    if force_refresh:
+        TokenCache.clear()
+        
     auth = ShopifyAuth(shop_url)
     return auth.get_access_token()
 

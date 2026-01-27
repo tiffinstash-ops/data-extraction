@@ -23,7 +23,7 @@ def fillZeros(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 def highlightMismatchedDeliveryCity(df: pd.DataFrame) -> pd.DataFrame:
-    df['City Mismatch'] = np.where(df['Select Delivery City'] != df['Shipping address city'], 'Mismatch', '')
+    df['City Mismatch'] = np.where(df['Select Delivery City'] != df['Shipping address city'], 'Incorrect City: ' + df['Shipping address city'].fillna(''), '')
     return df
 
 def findCity(df: pd.DataFrame) -> pd.DataFrame:

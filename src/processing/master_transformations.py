@@ -11,7 +11,8 @@ MASTER_COLUMNS = [
     "DELIVERY TIME", "QUANTITY", "DAYS", "COUNT", # 16-25 (Q-Y)
     "START DATE", "END DATE", "STATUS", "SKIP1", "SKIP2", "SKIP3", "SKIP4", "SKIP5", "SKIP6", 
     "SKIP7", "SKIP8", "SKIP9", "SKIP10", "SKIP11", "SKIP12", "SKIP13", "SKIP14", "SKIP15", "SKIP16", 
-    "SKIP17", "SKIP18", "SKIP19", "SKIP20", "DELSAT", "DELSUN", "TS NOTES", "DESCRIPTION", "EXTRA"
+    "SKIP17", "SKIP18", "SKIP19", "SKIP20", "DELSAT", "DELSUN", "TS NOTES", "DESCRIPTION",
+    "City Mismatch"
 ]
 
 def vlookup_sku(export_df: pd.DataFrame) -> pd.DataFrame:
@@ -88,6 +89,10 @@ def vlookup_sku(export_df: pd.DataFrame) -> pd.DataFrame:
     # Map Start Date (Master 25 <- Export 25)
     if len(export_df.columns) > 25:
         master_df.iloc[:, 25] = export_df.iloc[:, 25]
+
+    # Map City Mismatch if present in export_df
+    if "City Mismatch" in export_df.columns:
+        master_df["City Mismatch"] = export_df["City Mismatch"]
 
     # 6. Specialized logic for Column DAYS (Index 23)
     x_mapping = {

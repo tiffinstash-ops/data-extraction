@@ -15,6 +15,7 @@ from src.utils.constants import CSV_FIELDNAMES
 from src.processing.transformations import apply_all_transformations
 from src.processing.export_transformations import run_post_edit_transformations
 from src.processing.master_transformations import create_master_transformations
+from src.deliveries.deliveries_page import deliveries_page
 
 # Page configuration
 st.set_page_config(
@@ -114,6 +115,7 @@ def initialize_session_state():
 
 def authenticate():
     """Handle authentication."""
+    # 1. Check if we already have a token in session
     if st.session_state.access_token:
         st.session_state.authenticated = True
         update_access_token(st.session_state.access_token)
@@ -180,10 +182,9 @@ def load_sellers():
 
 
 def display_orders(df: pd.DataFrame, start_date, end_date, sku_filter=None):
-    """Display the orders metrics, table, and export options."""
+    """Display only the Master Data and related statistics."""
     # Apply seller-specific SKU filter if provided
     if sku_filter:
-        # Try to find SKU column
         sku_col = None
         for c in ['SKU', 'L', 'J']:
             if c in df.columns:
@@ -196,178 +197,48 @@ def display_orders(df: pd.DataFrame, start_date, end_date, sku_filter=None):
     if len(df) == 0:
         st.warning(f"No orders found{' for ' + sku_filter if sku_filter else ''} for the selected date range.")
         return
-    
-    # Metrics
-    st.header("📊 Order Statistics")
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    # helper to find col
-    def get_col(candidates):
-        for c in candidates:
-            if c in df.columns:
-                return c
-        return None
-
-    with col1:
-        st.markdown(f"""
-            <div class="metric-card">
-                <h3 style="margin:0; font-size: 2rem;">{len(df)}</h3>
-                <p style="margin:0; opacity: 0.9;">Total Line Items</p>
-            </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        oid_col = get_col(['A', 'ORDER ID'])
-        unique_orders = df[oid_col].nunique() if oid_col else 0
-        st.markdown(f"""
-            <div class="metric-card">
-                <h3 style="margin:0; font-size: 2rem;">{unique_orders}</h3>
-                <p style="margin:0; opacity: 0.9;">Unique Orders</p>
-            </div>
-        """, unsafe_allow_html=True)
-    
-    with col3:
-        # Convert back to numeric for calculation since we converted to string for Arrow
-        try:
-            qty_col = get_col(['W', 'QUANTITY'])
-            total_quantity = pd.to_numeric(df[qty_col], errors='coerce').sum() if qty_col else 0
-        except:
-            total_quantity = 0
-            
-        st.markdown(f"""
-            <div class="metric-card">
-                <h3 style="margin:0; font-size: 2rem;">{int(total_quantity)}</h3>
-                <p style="margin:0; opacity: 0.9;">Total Quantity</p>
-            </div>
-        """, unsafe_allow_html=True)
-    
-    with col4:
-        city_col = get_col(['H', 'Shipping address city', 'Select Delivery City'])
-        unique_cities = df[city_col].nunique() if city_col else 0
-        st.markdown(f"""
-            <div class="metric-card">
-                <h3 style="margin:0; font-size: 2rem;">{unique_cities}</h3>
-                <p style="margin:0; opacity: 0.9;">Unique Cities</p>
-            </div>
-        """, unsafe_allow_html=True)
-    
-    st.divider()
-    
-    # Data table
-    st.header("📋 Order Details")
-    
-    # Search and filter options
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        search_term = st.text_input("🔍 Search", placeholder="Search by order ID, email, city, etc.")
-    with col2:
-        show_columns = st.multiselect(
-            "Select Columns to Display",
-            options=df.columns.tolist()
-        )
-    
-    # Filter dataframe based on search
-    if search_term:
-        mask = df.astype(str).apply(lambda x: x.str.contains(search_term, case=False, na=False)).any(axis=1)
-        filtered_df = df[mask]
-    else:
-        filtered_df = df
-    
-    # Display columns selection
-    if show_columns:
-        display_df = filtered_df[show_columns]
-    else:
-        display_df = filtered_df
-    
-    # Transformation Actions
-    st.subheader("🛠️ Data Actions")
-    action_col1, action_col2, action_col3 = st.columns([1, 1, 2])
-
-    # Display dataframe
-    edited_df = st.data_editor(
-        display_df,
-        use_container_width=True, 
-        height=500,
-        key=f"editor_{start_date}_{end_date}"
-    )
-    
-    # Sync edits back to session state if changed
-    if not edited_df.equals(display_df):
-        st.session_state.orders_data.update(edited_df)
-        st.rerun()
-    
-    st.info(f"Showing {len(filtered_df)} of {len(df)} total line items")
-    
-    # Post-processing button
-    st.divider()
-    st.header("⚙️ Post-Edit Transformations")
-    
-    col1, col2 = st.columns([1, 2])
-    with col1:
-        if st.button("🚀 Export Data Transformations", use_container_width=True):
-            with st.spinner("Running transformations & expanding subscriptions..."):
-                try:
-                    # Use the filtered df (specific to seller) instead of full session state
-                    processed = run_post_edit_transformations(df)
-                    st.session_state.processed_data = processed
-                    st.session_state.master_data = None # Reset master if export changes
-                    st.success("Transformations complete!")
-                except Exception as e:
-                    st.error(f"Error during transform: {e}")
-
-    # Display processed data if available
-    if st.session_state.processed_data is not None:
-        st.header("📋 Final Export Data")
-        st.data_editor(st.session_state.processed_data, use_container_width=True, height=500, key=f"processed_editor_{start_date}_{end_date}")
-        
-        col1, col2 = st.columns(2)
-        
-        # Add filter to filename if present
-        file_suffix = f"_{sku_filter}" if sku_filter else ""
-        
-        with col1:
-            csv_buffer = io.StringIO()
-            st.session_state.processed_data.to_csv(csv_buffer, index=False)
-            st.download_button(
-                label="📥 Download Final CSV",
-                data=csv_buffer.getvalue(),
-                file_name=f"processed_orders{file_suffix}_{start_date}_{end_date}.csv",
-                mime="text/csv",
-                use_container_width=True,
-                key=f"dl_csv_{start_date}_{end_date}_{sku_filter}"
-            )
-        with col2:
-            excel_buffer = io.BytesIO()
-            st.session_state.processed_data.to_excel(excel_buffer, index=False, engine='openpyxl')
-            st.download_button(
-                label="📥 Download Final Excel",
-                data=excel_buffer.getvalue(),
-                file_name=f"processed_orders{file_suffix}_{start_date}_{end_date}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-                key=f"dl_excel_{start_date}_{end_date}_{sku_filter}"
-            )
-
-        # Move Generate Master Data button here
-        st.divider()
-        col_m1, col_m2, col_m3 = st.columns([1, 2, 1])
-        with col_m2:
-            if st.button("📊 Generate Master Data", use_container_width=True):
-                with st.spinner("Preparing Master format..."):
-                    try:
-                        master = create_master_transformations(st.session_state.processed_data)
-                        st.session_state.master_data = master
-                        st.success("Master format generated!")
-                    except Exception as e:
-                        st.error(f"Error generating master data: {e}")
 
     # Display master data if available
     if st.session_state.master_data is not None:
+        st.header("Master Data Statistics")
+        
+        # Master Statistics
+        m_s1, m_s2, m_s3, m_s4 = st.columns(4)
+        with m_s1:
+            st.metric("Total Line Items", len(st.session_state.master_data))
+        with m_s2:
+            unique_orders = st.session_state.master_data['ORDER ID'].nunique() if 'ORDER ID' in st.session_state.master_data.columns else 0
+            st.metric("Unique Orders", unique_orders)
+        with m_s3:
+            total_qty = pd.to_numeric(st.session_state.master_data['QUANTITY'], errors='coerce').sum() if 'QUANTITY' in st.session_state.master_data.columns else 0
+            st.metric("Total Quantity", int(total_qty))
+        with m_s4:
+            unique_cities = st.session_state.master_data['CITY'].nunique() if 'CITY' in st.session_state.master_data.columns else 0
+            st.metric("Unique Cities", unique_cities)
+
         st.divider()
-        st.header("📈 Master Data")
-        st.markdown("_55-column format including X-mapping, CLABL, and defaults_")
-        st.data_editor(st.session_state.master_data, use_container_width=True, height=500, key=f"master_editor_{start_date}_{end_date}")
+
+        # Search and filter for Master Data
+        m_col1, m_col2 = st.columns([2, 1])
+        with m_col1:
+            m_search = st.text_input("🔍 Search Master Data", placeholder="Search by name, SKU, seller, etc.", key=f"m_search_{start_date}_{end_date}")
+        with m_col2:
+            m_show_cols = st.multiselect(
+                "Select Master Columns",
+                options=st.session_state.master_data.columns.tolist(),
+                key=f"m_cols_{start_date}_{end_date}"
+            )
+
+        # Filter Master Data
+        display_master = st.session_state.master_data.copy()
+        if m_search:
+            m_mask = display_master.astype(str).apply(lambda x: x.str.contains(m_search, case=False, na=False)).any(axis=1)
+            display_master = display_master[m_mask]
+        
+        if m_show_cols:
+            display_master = display_master[m_show_cols]
+
+        st.data_editor(display_master, use_container_width=True, height=600, key=f"master_editor_{start_date}_{end_date}")
         
         col1, col2 = st.columns(2)
         file_suffix = f"_{sku_filter}" if sku_filter else ""
@@ -380,7 +251,8 @@ def display_orders(df: pd.DataFrame, start_date, end_date, sku_filter=None):
                 data=m_csv_buffer.getvalue(),
                 file_name=f"master_orders{file_suffix}_{start_date}_{end_date}.csv",
                 mime="text/csv",
-                use_container_width=True
+                use_container_width=True,
+                key=f"dl_csv_m_{start_date}_{end_date}"
             )
         with col2:
             m_excel_buffer = io.BytesIO()
@@ -390,41 +262,9 @@ def display_orders(df: pd.DataFrame, start_date, end_date, sku_filter=None):
                 data=m_excel_buffer.getvalue(),
                 file_name=f"master_orders{file_suffix}_{start_date}_{end_date}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
+                use_container_width=True,
+                key=f"dl_excel_m_{start_date}_{end_date}"
             )
-
-    # Export options (for raw/edited data)
-    st.header("💾 Download Raw/Edited Data")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # CSV export
-        csv_buffer = io.StringIO()
-        df.to_csv(csv_buffer, index=False)
-        csv_data = csv_buffer.getvalue()
-        
-        st.download_button(
-            label="📥 Download as CSV",
-            data=csv_data,
-            file_name=f"shopify_orders_{start_date}_{end_date}.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
-    
-    with col2:
-        # Excel export
-        excel_buffer = io.BytesIO()
-        df.to_excel(excel_buffer, index=False, engine='openpyxl')
-        excel_data = excel_buffer.getvalue()
-        
-        st.download_button(
-            label="📥 Download as Excel",
-            data=excel_data,
-            file_name=f"shopify_orders_{start_date}_{end_date}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
-        )
 
 
 def render_sidebar():
@@ -537,7 +377,14 @@ def render_main_content(sku_filter=None):
                     end_date.strftime("%Y-%m-%d")
                 )
                 st.session_state.orders_data = df
-                st.session_state.processed_data = None
+                
+                # Automatically run transformations
+                with st.spinner("Processing transformations..."):
+                    processed = run_post_edit_transformations(df)
+                    st.session_state.processed_data = processed
+                    master = create_master_transformations(processed)
+                    st.session_state.master_data = master
+                
             except Exception as e:
                 st.error(f"❌ Error fetching orders: {str(e)}")
                 return
@@ -703,7 +550,8 @@ def main():
     
     # Define pages
     pages = [
-        st.Page(dashboard_page, title="Home", icon="🏠", url_path="dashboard")
+        st.Page(dashboard_page, title="Home", icon="🏠", url_path="dashboard"),
+        st.Page(deliveries_page, title="Deliveries", icon="🚚", url_path="deliveries")
     ]
     
     for _, row in sellers_df.iterrows():
