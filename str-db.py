@@ -14,7 +14,7 @@ db_name = "postgres"
 instance_connection_name = "pelagic-campus-484800-b3:us-central1:tiffinstash-master" 
 
 # Use a Service Account Key file for authentication
-KEY_PATH = os.getenv("TIFFINSTASH_SA_KEY") if os.getenv("TIFFINSTASH_SA_KEY") else "/Users/deepshah/Downloads/tiffinstash-key.json"
+KEY_PATH = "/etc/tiffinstash-sa-key" if os.path.exists("/etc/tiffinstash-sa-key") else "/Users/deepshah/Downloads/tiffinstash-key.json"
 credentials = service_account.Credentials.from_service_account_file(KEY_PATH)
 
 # 2. Initialize Connector & Create Engine
