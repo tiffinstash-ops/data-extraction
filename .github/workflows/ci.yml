@@ -23,10 +23,10 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and Push Docker image
+      - name: Build and Push Backend
         run: |
-          docker build -t docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:latest .
-          docker push docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:latest
+          docker build -f backend/Dockerfile -t docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction-backend:latest .
+          docker push docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction-backend:latest
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -36,13 +36,32 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Deploy to Cloud Run
+      - name: Deploy Backend to Cloud Run
+        id: deploy-backend
         run: |
           gcloud config set project pelagic-campus-484800-b3 --quiet
-          gcloud run deploy data-extraction \
-            --image=docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:latest \
+          BACKEND_URL=$(gcloud run deploy data-extraction-backend \
+            --image=docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction-backend:latest \
+            --platform=managed \
+            --region=us-east1 \
+            --allow-unauthenticated \
+            --port=8000 \
+            --format='value(status.url)')
+          echo "BACKEND_URL=$BACKEND_URL" >> $GITHUB_ENV
+
+      - name: Build and Push Frontend
+        run: |
+          cd frontend
+          docker build -t docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction-frontend:latest .
+          docker push docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction-frontend:latest
+
+      - name: Deploy Frontend to Cloud Run
+        run: |
+          gcloud run deploy data-extraction-frontend \
+            --image=docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction-frontend:latest \
             --platform=managed \
             --region=us-east1 \
             --allow-unauthenticated \
             --port=8501 \
+            --set-env-vars BACKEND_URL=${{ env.BACKEND_URL }} \
             --quiet

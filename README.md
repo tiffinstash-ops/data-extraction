@@ -1,157 +1,75 @@
-# Daily Orders Data
 
-A Python application to export Shopify orders with custom attributes (Globo) to CSV format.
+# Tiffinstash Data Extraction & Management
 
-## Project Structure
+This repository is divided into two main services:
 
-```
-.
-├── app.py              # Streamlit web application (recommended)
-├── config.py           # Configuration settings (API URL, headers, etc.)
-├── constants.py        # Constants (CSV fields, GraphQL queries)
-├── models.py           # Data models (Order, LineItem, ShippingAddress)
-├── utils.py            # Utility functions (data cleaning, formatting)
-├── shopify_client.py   # Shopify API client
-├── auth.py             # OAuth authentication
-├── exporter.py         # CSV export functionality
-├── get_token.py        # Standalone token retrieval script
-├── main.py             # Command-line entry point
-├── requirements.txt    # Python dependencies
-└── README.md           # This file
-```
+## 1. Backend (FastAPI)
+Located in `/backend`.
+Handles Shopify API integration, data transformations, and PostgreSQL database interactions via Cloud SQL.
 
-## Setup
+### Features:
+- Shopify Order Fetching
+- Post-edit & Master Data Transformations
+- Delivery Management API (CRUD on Postgres)
+- Seller Information API
 
-1. **Install dependencies:**
+### Deployment:
+- Dockerfile: `/backend/Dockerfile`
+- Port: 8000
+
+## 2. Frontend (Streamlit)
+Located in `/frontend`.
+Provides the user interface for fetching orders, viewing statistics, and managing deliveries.
+
+### Features:
+- Dashboard for order fetching and processing.
+- Delivery Management dashboard with a form to update SKU fields and TL Notes.
+- Dynamic Seller Dashboards.
+
+### Deployment:
+- Dockerfile: `/frontend/Dockerfile`
+- Port: 8501
+- Environment Variables: `BACKEND_URL` (default: http://localhost:8000)
+
+## Getting Started
+
+### Local Development
+1. Start Backend:
    ```bash
+   cd backend
    pip install -r requirements.txt
+   export PYTHONPATH=$PYTHONPATH:.
+   uvicorn app.main:app --reload
    ```
 
-2. **Configure authentication:**
-
-   You have two options for authentication:
-
-   **Option A: Use OAuth Client Credentials (Recommended)**
-   
-   Set your OAuth credentials as environment variables:
+2. Start Frontend:
    ```bash
-   export SHOPIFY_CLIENT_ID="your_client_id_here"
-   export SHOPIFY_CLIENT_SECRET="your_client_secret_here"
-   ```
-   
-   Then retrieve your access token:
-   ```bash
-   python get_token.py
-   ```
-   
-   The script will display your access token and provide instructions on how to save it.
-
-   **Option B: Use Pre-existing Access Token**
-   
-   If you already have an access token, set it as an environment variable:
-   ```bash
-   export SHOPIFY_ACCESS_TOKEN="your_access_token_here"
-   ```
-   
-   Or edit `config.py` and add it directly:
-   ```python
-   ACCESS_TOKEN = "your_access_token_here"
+   cd frontend
+   pip install -r requirements.txt
+   streamlit run app/main.py
    ```
 
-## Usage
+### Docker Compose (Recommended)
+You can use Docker Compose to run both services together.
 
-### Streamlit Web App (Recommended)
+```yaml
+version: '3.8'
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/data:/app/data
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
 
-Run the interactive web application:
-```bash
-streamlit run app.py
+  frontend:
+    build: ./frontend
+    ports:
+      - "8501:8501"
+    environment:
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      - backend
 ```
-
-This will open a web interface where you can:
-- Authenticate with Shopify
-- Select custom date ranges using a date picker
-- View orders in an interactive table
-- Search and filter results
-- See order statistics and metrics
-- Download data as CSV or Excel
-
-### Command Line Usage
-
-Run the main script:
-```bash
-python main.py
-```
-
-By default, this will export orders from the date range specified in `main.py`.
-
-### Custom Date Range
-
-Edit `main.py` to change the date range:
-```python
-start_date = "2026-01-13"
-end_date = "2026-01-14"
-```
-
-### Custom Output Filename
-
-```python
-fetch_and_export("2026-01-13", "2026-01-14", "my_orders.csv")
-```
-
-### Programmatic Usage
-
-```python
-from exporter import fetch_and_export
-
-# Export orders
-fetch_and_export("2026-01-13", "2026-01-14")
-```
-
-## Features
-
-- **🌐 Web Interface**: Interactive Streamlit app with date pickers and data visualization
-- **🔐 OAuth Authentication**: Automatic access token retrieval using client credentials
-- **📊 Data Visualization**: View order statistics and metrics in real-time
-- **🔍 Search & Filter**: Interactive table with search and column selection
-- **💾 Multiple Export Formats**: Download as CSV or Excel
-- **📄 Pagination Support**: Automatically handles Shopify API pagination
-- **⏱️ Rate Limiting**: Built-in delays to respect API rate limits
-- **🎨 Custom Attributes**: Exports Globo custom attributes
-- **🧹 Data Cleaning**: Replaces null/empty values with 0
-- **🌍 Timezone Support**: Configurable timezone (default: US/Eastern)
-
-## CSV Output
-
-The exported CSV includes the following fields:
-- Order details (ID, date, name, email)
-- Shipping information (address, phone, city, zip)
-- Line item details (SKU, quantity)
-- Custom attributes (delivery instructions, times, etc.)
-
-## Configuration
-
-### API Settings (`config.py`)
-- `SHOPIFY_URL`: Your Shopify GraphQL API endpoint
-- `ACCESS_TOKEN`: Your Shopify access token
-- `API_DELAY_SECONDS`: Delay between API requests (default: 0.5s)
-
-### Timezone (`config.py`)
-- `TIMEZONE`: Timezone for date filtering (default: 'US/Eastern')
-
-## Error Handling
-
-The application will print error messages if:
-- API requests fail (non-200 status codes)
-- Authentication fails
-- Network issues occur
-
-## Security Note
-
-**Important**: Never commit your `ACCESS_TOKEN` to version control. Consider using:
-- Environment variables
-- `.env` files (with `.gitignore`)
-- Secret management services
-
-## License
-
-MIT
