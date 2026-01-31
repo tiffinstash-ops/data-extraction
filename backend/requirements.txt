@@ -9,3 +9,4 @@ google-auth
 openpyxl>=3.1.0
 python-dotenv
 pytz
+phonenumbers==9.0.22

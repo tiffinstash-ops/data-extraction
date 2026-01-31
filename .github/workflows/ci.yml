@@ -63,5 +63,4 @@ jobs:
             --region=us-east1 \
             --allow-unauthenticated \
             --port=8501 \
-            --set-env-vars BACKEND_URL=${{ env.BACKEND_URL }} \
             --quiet
