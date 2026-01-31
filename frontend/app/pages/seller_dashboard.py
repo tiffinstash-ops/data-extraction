@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import os
-from src.utils.api import sanitize_df
+from utils.api import sanitize_df
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 

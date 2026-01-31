@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import os
-from src.utils.api import upload_master_data_api
+from utils.api import upload_master_data_api
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 

@@ -1,12 +1,12 @@
 import streamlit as st
 import pandas as pd
-from src.utils.api import get_order_details, update_manual_fields_api
+from utils.api import get_order_details, update_manual_fields_api
 
 def delivery_management_page():
     st.title("🚚 Delivery Management")
     
     # 1. VIEW AN ORDER
-    st.header("🔍 View Order Details")
+    st.header("🔍 View Order Details")  
     search_id = st.text_input("Enter Order ID to view", placeholder="e.g. 123456789")
     if st.button("Search Database"):
         if search_id:

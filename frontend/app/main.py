@@ -4,12 +4,12 @@ from functools import partial
 import os
 
 # Import Pages
-from app.pages.dashboard import dashboard_page
-from app.pages.delivery import delivery_management_page
-from app.pages.seller_aggregated import seller_data_page
-from app.pages.master_db import master_database_page
-from app.pages.seller_dashboard import seller_page
-from app.utils.api import load_sellers_api
+from pages.dashboard import dashboard_page
+from pages.delivery import delivery_management_page
+from pages.seller_aggregated import seller_data_page
+from pages.master_db import master_database_page
+from pages.seller_dashboard import seller_page
+from utils.api import load_sellers_api
 
 # Wide layout so tables use full width (must be first Streamlit command)
 st.set_page_config(layout="wide", page_title="Data Extraction")

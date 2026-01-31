@@ -1,5 +1,5 @@
 import streamlit as st
-from src.utils.api import update_master_row_api, sanitize_df
+from utils.api import update_master_row_api, sanitize_df
 import requests
 import pandas as pd
 import os
