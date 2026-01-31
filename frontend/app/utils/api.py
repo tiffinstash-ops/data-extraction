@@ -4,8 +4,8 @@ import os
 
 # Configuration
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
-SUPERUSER_USERNAME = os.getenv("SUPERUSER_USERNAME", "admin")
-SUPERUSER_PASSWORD = os.getenv("SUPERUSER_PASSWORD", "admin")
+SUPERUSER_USERNAME = os.getenv("SUPERUSER_USERNAME")
+SUPERUSER_PASSWORD = os.getenv("SUPERUSER_PASSWORD")
 
 def sanitize_df(df):
     for col in df.columns:
