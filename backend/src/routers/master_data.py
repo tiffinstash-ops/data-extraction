@@ -11,6 +11,8 @@ from src.core.database import get_db_engine
 from src.schemas import MasterRowUpdate, SkipUpdate
 from src.utils.constants import SHOPIFY_ORDER_FIELDNAMES
 
+from src.core.models import OrderStatus
+
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
@@ -19,7 +21,8 @@ def get_all_master_data():
     engine, connector = get_db_engine()
     try:
         with engine.connect() as conn:
-            query = 'SELECT * FROM "historical-data" ORDER BY "ORDER ID" ASC;'
+            statuses = "', '".join([s.value for s in OrderStatus])
+            query = f"SELECT * FROM \"historical-data\" WHERE \"STATUS\" IN ('{statuses}') OR \"STATUS\" IS NULL ORDER BY \"ORDER ID\" ASC;"
             df = pd.read_sql(query, engine)
 
             # Clean dataframe for JSON serialization
@@ -140,7 +143,9 @@ def upload_master_data(data: List[Dict]):
                 # Params preparation
                 def safe_param(k):
                     # Only allow letters, numbers and underscores in bind parameter names
-                    return re.sub(r'[^a-zA-Z0-9_]', '_', k)
+                    # Replace spaces with underscores
+                    return re.sub(r'[^a-zA-Z0-9_]', '_', k.strip())
+
 
                 # Normalize DATE to YYYY-MM-DD if it's in DD-MMM format (PostgreSQL rejects "30-Jan")
                 date_val = valid_row.get("DATE")

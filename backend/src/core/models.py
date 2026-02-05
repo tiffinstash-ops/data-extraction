@@ -3,6 +3,14 @@ Data models for Shopify orders.
 """
 from dataclasses import dataclass
 from typing import Optional, Dict, List
+from enum import Enum
+
+
+class OrderStatus(str, Enum):
+    WIP = "WIP"
+    PAUSE = "PAUSE"
+    TBS = "TBS"
+    LAST_DAY = "LAST DAY"
 
 
 @dataclass

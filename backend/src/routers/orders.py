@@ -101,7 +101,14 @@ def get_order_details(order_id: str):
                     else: data[k] = str(v)
                 orders.append(data)
             return orders
+    except HTTPException as e:
+        if e.status_code == 404:
+            logger.warning(f"Order {order_id} not found")
+        else:
+            logger.error(f"Error fetching order details: {str(e)}")
+        raise e
     except Exception as e:
+        logger.error(f"Error fetching order details: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         connector.close()
