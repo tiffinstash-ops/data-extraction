@@ -1,8 +1,8 @@
 import pandas as pd
 from datetime import timedelta
-from src.utils.constants import CSV_FIELDNAMES
+from src.utils.constants import SHOPIFY_ORDER_FIELDNAMES
 
-# Source Column Mapping (based on CSV_FIELDNAMES index)
+# Source Column Mapping (based on SHOPIFY_ORDER_FIELDNAMES index)
 IDX_ORDER_ID = 0
 IDX_DATE = 1
 IDX_NAME = 2
@@ -42,7 +42,7 @@ def create_export_dataframe(source_df: pd.DataFrame) -> pd.DataFrame:
     """Map source columns to the finalized export layout."""
     new_data = []
     def get_val(row, idx):
-        col_name = CSV_FIELDNAMES[idx]
+        col_name = SHOPIFY_ORDER_FIELDNAMES[idx]
         return row[col_name] if col_name in row else ""
 
     for _, row in source_df.iterrows():

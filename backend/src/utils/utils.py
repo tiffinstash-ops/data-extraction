@@ -5,8 +5,8 @@ from datetime import datetime
 import pytz
 from typing import Any, Dict
 from src.core.models import Order, LineItem
-from src.utils.constants import CSV_FIELDNAMES
-
+from src.utils.constants import SHOPIFY_ORDER_FIELDNAMES
+import phonenumbers
 
 def clean(val: Any) -> Any:
     """
@@ -63,7 +63,7 @@ def order_to_csv_row(order: Order, line_item: LineItem) -> Dict[str, Any]:
         "DATE": clean(order.created_at),
         "NAME": clean(order.customer_name),
         "Shipping address phone numeric": clean(shipping.phone if shipping else None),
-        "phone_edit": clean(shipping.phone if shipping else None),
+        "phone_edit": clean(str(phonenumbers.parse(shipping.phone, "US").national_number) if shipping else None),
         "EMAIL": clean(order.email),
         "HOUSE UNIT NO": clean(shipping.address2 if shipping else None),
         "ADDRESS LINE 1": clean(shipping.address1 if shipping else None),

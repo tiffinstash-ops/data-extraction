@@ -6,7 +6,7 @@ import logging
 from typing import Optional
 from src.core.shopify_client import ShopifyClient
 from src.utils.utils import create_date_filter_query, order_to_csv_row
-from src.utils.constants import CSV_FIELDNAMES
+from src.utils.constants import SHOPIFY_ORDER_FIELDNAMES
 from src.utils.config import SHOPIFY_URL, HEADERS, TIMEZONE, DEFAULT_OUTPUT_FILENAME
 
 # Configure logger
@@ -50,7 +50,7 @@ class OrderExporter:
         total_count = 0
         
         with open(filename, mode='w', newline='', encoding='utf-8') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=CSV_FIELDNAMES, quoting=csv.QUOTE_MINIMAL)
+            writer = csv.DictWriter(csvfile, fieldnames=SHOPIFY_ORDER_FIELDNAMES, quoting=csv.QUOTE_MINIMAL)
             writer.writeheader()
             
             # Fetch and write orders
