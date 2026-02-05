@@ -25,7 +25,8 @@ jobs:
 
       - name: Build and Push Backend
         run: |
-          docker build -f backend/Dockerfile -t docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction-backend:latest .
+          cd backend
+          docker build -t docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction-backend:latest .
           docker push docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction-backend:latest
 
       - name: Authenticate to Google Cloud
