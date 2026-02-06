@@ -14,6 +14,8 @@ import logging
 import numpy as np
 import gspread
 from google.oauth2.service_account import Credentials
+import json
+from google.auth import default
 
 # Configure logger
 logging.basicConfig(level=logging.INFO)
@@ -21,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 # Import existing logic (relative paths adjusted)
 from src.core.shopify_client import ShopifyClient
-from src.core.auth import get_shopify_access_token
+from src.core.auth import get_shopify_access_token, get_credentials
 from src.utils.config import SHOPIFY_URL, SHOPIFY_SHOP_BASE_URL, ACCESS_TOKEN, update_access_token
 from src.utils.utils import create_date_filter_query, order_to_csv_row
 from src.utils.constants import SHOPIFY_ORDER_FIELDNAMES
@@ -35,11 +37,11 @@ app = FastAPI(title="Tiffinstash API")
 DB_USER = "postgres"
 DB_PASS = "tiffinstash2026"
 DB_NAME = "postgres"
-INSTANCE_CONNECTION_NAME = "pelagic-campus-484800-b3:us-central1:tiffinstash-master" 
-KEY_PATH = "/etc/tiffinstash-sa-key" if os.path.exists("/etc/tiffinstash-sa-key") else "/Users/deepshah/Downloads/tiffinstash-key.json"
+INSTANCE_CONNECTION_NAME = "pelagic-campus-484800-b3:us-central1:tiffinstash-master"
+
 
 def get_db_engine():
-    credentials = service_account.Credentials.from_service_account_file(KEY_PATH)
+    credentials = get_credentials()
     connector = Connector(credentials=credentials)
 
     def getconn():
@@ -309,6 +311,7 @@ def skip_order(update: SkipUpdate):
 
 @app.get("/master-data")
 def get_all_master_data():
+    logger.info("Getting master data")
     engine, connector = get_db_engine()
     try:
         with engine.connect() as conn:
@@ -505,7 +508,7 @@ def upload_master_data(data: List[Dict]):
 def fetch_seller_data(sheet_id: str):
     try:
         SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
-        creds = service_account.Credentials.from_service_account_file(KEY_PATH, scopes=SCOPES)
+        creds = get_credentials(scopes=SCOPES)
         client = gspread.authorize(creds)
         
         sh = client.open_by_key(sheet_id)
@@ -529,7 +532,7 @@ def fetch_seller_data(sheet_id: str):
 def fetch_aggregated_seller_data():
     try:
         SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
-        creds = service_account.Credentials.from_service_account_file(KEY_PATH, scopes=SCOPES)
+        creds = get_credentials(scopes=SCOPES)
         client = gspread.authorize(creds)
         
         SHEET_URLS = [

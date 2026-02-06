@@ -7,16 +7,18 @@ from datetime import datetime, timedelta
 from google.cloud.sql.connector import Connector, IPTypes
 from google.oauth2 import service_account
 
+from src.core.auth import get_credentials
+
 # 1. Database Credentials
 DB_USER = "postgres"
 DB_PASS = "tiffinstash2026"
 DB_NAME = "postgres"
 INSTANCE_CONNECTION_NAME = "pelagic-campus-484800-b3:us-central1:tiffinstash-master" 
-KEY_PATH = "/etc/tiffinstash-sa-key" if os.path.exists("/etc/tiffinstash-sa-key") else "/Users/deepshah/Downloads/tiffinstash-key.json"
+
 
 def get_engine():
     """Create and return SQLAlchemy engine using Cloud SQL Connector."""
-    credentials = service_account.Credentials.from_service_account_file(KEY_PATH)
+    credentials = get_credentials()
     connector = Connector(credentials=credentials)
 
     def getconn():

@@ -10,6 +10,9 @@ import requests
 import certifi
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
+from google.oauth2 import service_account
+from google.auth import default
+import json
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -63,6 +66,40 @@ def get_tiffinstash_secret(env_name: str, creds_file: str = "/etc/tiffinstash-cr
             logger.warning(f"Failed to read secret from {creds_file}: {e}")
             
     return None
+
+
+def get_credentials(scopes=None):
+    """
+    Gets Google Service Account credentials from environment variable, 
+    mounted secret file, or local development file.
+    """
+    # 1. Check if key content is in environment variable
+    key_content = os.environ.get("tiffinstash-sa-key")
+    if key_content:
+        try:
+            info = json.loads(key_content)
+            creds = service_account.Credentials.from_service_account_info(info)
+            if scopes:
+                creds = creds.with_scopes(scopes)
+            return creds
+        except Exception as e:
+            logger.warning(f"Failed to parse 'tiffinstash-sa-key' env var as JSON: {e}")
+
+    # 2. Check for mounted secret file or local development file
+    possible_paths = [
+        "/etc/tiffinstash-sa-key",
+        "/Users/deepshah/Downloads/tiffinstash-key.json"
+    ]
+    for path in possible_paths:
+        if os.path.exists(path):
+            return service_account.Credentials.from_service_account_file(path, scopes=scopes)
+    
+    # 3. Fallback to application default credentials (ADC)
+    logger.info("No service account key found, falling back to Application Default Credentials")
+    credentials, _ = default()
+    if scopes:
+        credentials = credentials.with_scopes(scopes)
+    return credentials
 
 
 class TokenCache:

@@ -11,11 +11,10 @@ import re
 import os
 import csv
 from datetime import datetime
+from src.core.auth import get_credentials
 
 from src.utils.constants import SELLER_FIELDNAMES, SHEET_URLS
 
-# Needed for gspread
-KEY_PATH = "/etc/tiffinstash-sa-key" if os.path.exists("/etc/tiffinstash-sa-key") else "/Users/deepshah/Downloads/tiffinstash-key.json"
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -55,7 +54,7 @@ def get_sellers():
 def fetch_seller_data(sheet_id: str):
     try:
         SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
-        creds = service_account.Credentials.from_service_account_file(KEY_PATH, scopes=SCOPES)
+        creds = get_credentials(scopes=SCOPES)
         client = gspread.authorize(creds)
         
         sh = client.open_by_key(sheet_id)
@@ -79,7 +78,7 @@ def fetch_seller_data(sheet_id: str):
 def fetch_aggregated_seller_data():
     try:
         SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
-        creds = service_account.Credentials.from_service_account_file(KEY_PATH, scopes=SCOPES)
+        creds = get_credentials(scopes=SCOPES)
         
         all_rows = []
         errors = []
