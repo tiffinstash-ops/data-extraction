@@ -22,7 +22,7 @@ from src.core.shopify_client import ShopifyClient
 from src.core.auth import get_shopify_access_token
 from src.utils.config import SHOPIFY_URL, SHOPIFY_SHOP_BASE_URL, ACCESS_TOKEN, update_access_token
 from src.utils.utils import create_date_filter_query, order_to_csv_row
-from src.utils.constants import CSV_FIELDNAMES
+from src.utils.constants import SHOPIFY_ORDER_FIELDNAMES
 from src.processing.transformations import apply_all_transformations
 from src.processing.export_transformations import run_post_edit_transformations
 from src.processing.master_transformations import create_master_transformations
@@ -170,7 +170,7 @@ def get_orders(
                 row = order_to_csv_row(order, line_item)
                 rows.append(row)
         
-        df = pd.DataFrame(rows, columns=CSV_FIELDNAMES)
+        df = pd.DataFrame(rows, columns=SHOPIFY_ORDER_FIELDNAMES)
         
         # Apply standard transformations
         df = apply_all_transformations(df)
@@ -845,7 +845,7 @@ def fetch_aggregated_seller_data():
             # Or just return them as generic "Column A", "Column B"...
             # The user wants to "Upload to Database". 
             # The DB expects keys: "ORDER ID", "DATE", "NAME", etc.
-            # We need a MAPPING from Sheet Columns (A-Z) to CSV_FIELDNAMES logic.
+            # We need a MAPPING from Sheet Columns (A-Z) to SHOPIFY_ORDER_FIELDNAMES logic.
             # Based on `order_to_csv_row` logic or standard mapping.
             
             # Assuming standard "Master Data" columns:
@@ -862,22 +862,22 @@ def fetch_aggregated_seller_data():
             # ...
             # J: SKU ? (Wait, J is TS-VD code)
             
-            # Let's inspect `CSV_FIELDNAMES` in constants.py to map index to name.
+            # Let's inspect `SHOPIFY_ORDER_FIELDNAMES` in constants.py to map index to name.
             # Step 22 output shows:
             # 0: ORDER ID
             # 1: DATE
             # 2: NAME
             # ...
             # This aligns perfectly with A, B, C...
-            # So we just zip `CSV_FIELDNAMES` with `[col_a, col_b] + filtered_vals`
+            # So we just zip `SHOPIFY_ORDER_FIELDNAMES` with `[col_a, col_b] + filtered_vals`
             
             full_row = [col_a, col_b] + filtered_vals
             
-            # Truncate or pad if list lengths don't match CSV_FIELDNAMES length
-            # valid_fields = CSV_FIELDNAMES (from imports)
+            # Truncate or pad if list lengths don't match SHOPIFY_ORDER_FIELDNAMES length
+            # valid_fields = SHOPIFY_ORDER_FIELDNAMES (from imports)
             # Create dict
             row_dict = {}
-            for i, field in enumerate(CSV_FIELDNAMES):
+            for i, field in enumerate(SHOPIFY_ORDER_FIELDNAMES):
                 if i < len(full_row):
                     row_dict[field] = full_row[i]
                 else:
