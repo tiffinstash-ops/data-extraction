@@ -12,13 +12,7 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy source code and data
-COPY src/ /app/src/
-COPY data/ /app/data/
-COPY app/ /app/app/
-
-# Set Python path to include /app so src.xxx imports work
-ENV PYTHONPATH=/app
+COPY . .
 
 EXPOSE 8000
 
