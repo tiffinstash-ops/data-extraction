@@ -7,7 +7,7 @@ on:
   pull_request:
 
 jobs:
-  build-and-deploy:
+  backend-deploy:
     runs-on: ubuntu-latest
     permissions:
       contents: 'read'
@@ -41,25 +41,49 @@ jobs:
         id: deploy-backend
         run: |
           gcloud config set project pelagic-campus-484800-b3 --quiet
-          BACKEND_URL=$(gcloud run deploy data-extraction-backend \
+          gcloud run deploy data-extraction-backend \
             --image=docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction-backend:latest \
             --platform=managed \
             --region=us-east1 \
             --allow-unauthenticated \
             --port=8000 \
-            --format='value(status.url)')
-          echo "BACKEND_URL=$BACKEND_URL" >> $GITHUB_ENV
+            --quiet
+
+  frontend-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and Push Frontend
         run: |
           cd frontend
-          docker build -t docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction-frontend:latest .
-          docker push docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction-frontend:latest
+          docker build -t docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:latest .
+          docker push docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction:latest
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GOOGLE_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
 
       - name: Deploy Frontend to Cloud Run
         run: |
-          gcloud run deploy data-extraction-frontend \
-            --image=docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction-frontend:latest \
+          gcloud config set project pelagic-campus-484800-b3 --quiet
+          gcloud run deploy data-extraction-backend \
+            --image=docker.io/${{ secrets.DOCKERHUB_USERNAME }}/data-extraction-backend:latest \
             --platform=managed \
             --region=us-east1 \
             --allow-unauthenticated \
