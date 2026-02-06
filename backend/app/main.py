@@ -12,6 +12,8 @@ from google.cloud.sql.connector import Connector, IPTypes
 from google.oauth2 import service_account
 import logging
 import numpy as np
+import gspread
+from google.oauth2.service_account import Credentials
 
 # Configure logger
 logging.basicConfig(level=logging.INFO)
@@ -498,9 +500,6 @@ def upload_master_data(data: List[Dict]):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         connector.close()
-
-import gspread
-from google.oauth2.service_account import Credentials
 
 @app.get("/fetch-seller-data")
 def fetch_seller_data(sheet_id: str):
