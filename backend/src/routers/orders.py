@@ -113,6 +113,46 @@ def get_order_details(order_id: str):
     finally:
         connector.close()
 
+@router.get("/shopify/search")
+def search_shopify_orders(
+    q: str = Query(..., description="Search query"),
+):
+    try:
+        token = get_shopify_access_token(SHOPIFY_SHOP_BASE_URL)
+        if not token:
+            raise HTTPException(status_code=401, detail="Missing Shopify token")
+
+        client = ShopifyClient(SHOPIFY_URL, {
+            "Content-Type": "application/json",
+            "X-Shopify-Access-Token": token
+        })
+        
+        # Shopify search query
+        # If no colon is provided, we search across several likely fields
+        if ":" not in q:
+            # Quotation helps with spaces for the general search part
+            # name = Order number (e.g. #1001)
+            # customer = customer name/email/phone
+            # address1 = street address
+            query = f'name:*{q}* OR customer:*{q}* OR email:*{q}* OR address1:*{q}* OR "{q}"'
+        else:
+            query = q
+        
+        rows = []
+        for order in client.fetch_orders(query):
+            for line_item in order.line_items:
+                row = order_to_csv_row(order, line_item)
+                rows.append(row)
+        
+        df = pd.DataFrame(rows, columns=SHOPIFY_ORDER_FIELDNAMES)
+        df = apply_all_transformations(df)
+        df = df.replace([np.inf, -np.inf], np.nan).astype(object).where(pd.notnull(df), None)
+        
+        return df.to_dict(orient="records")
+    except Exception as e:
+        logger.error(f"Shopify search error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/update-order")
 def update_order(update: OrderUpdate):
     engine, connector = get_db_engine()
@@ -121,19 +161,25 @@ def update_order(update: OrderUpdate):
             update_parts = []
             params = {"oid": update.order_id}
             
-            # The user requested 'TL Notes'. In the DB we found 'TS NOTES'. 
-            # I will try both or just use the requested one.
+            # 1. Handle TL Notes -> TS NOTES
             if update.tl_notes is not None:
-                update_parts.append('"TS NOTES" = :ts_notes') # Mapping TL Notes to TS NOTES
+                update_parts.append('"TS NOTES" = :ts_notes')
                 params["ts_notes"] = update.tl_notes
             
+            # 2. Handle SKU1-20/SKIP1-20
             for k, v in update.skus.items():
-                if v: # Only update if value is provided
-                    # Handle mapping SKU1-20 to SKIP1-20 if they are the same thing
-                    # For now, we use exact names supplied or mapped
-                    field_name = k.replace("SKU", "SKIP") # MAPPING SKU to SKIP based on DB observation
+                if v is not None:
+                    field_name = k.replace("SKU", "SKIP") if "SKU" in k else k
                     update_parts.append(f'"{field_name}" = :{k}')
                     params[k] = v
+                    
+            # 3. Handle arbitrary filters/updates if provided
+            if update.filters:
+                for k, v in update.filters.items():
+                    if v is not None and k != "ORDER ID":
+                        param_key = f"f_{k.replace(' ', '_')}"
+                        update_parts.append(f'"{k}" = :{param_key}')
+                        params[param_key] = v
                 
             if not update_parts:
                 return {"status": "no changes"}
@@ -141,16 +187,10 @@ def update_order(update: OrderUpdate):
             set_s = ", ".join(update_parts)
             sql = f'UPDATE "historical-data" SET {set_s} WHERE "ORDER ID" = :oid'
             
+            # If SKU is provided, pin the update to that specific SKU's row
             if update.sku:
                 sql += ' AND "SKU" = :sku'
                 params["sku"] = update.sku
-            
-            if update.filters:
-                for k, v in update.filters.items():
-                    if v:
-                        param_key = f"f_{k.replace(' ', '_')}"
-                        sql += f' AND "{k}" = :{param_key}'
-                        params[param_key] = v
                 
             conn.execute(text(sql), params)
             conn.commit()

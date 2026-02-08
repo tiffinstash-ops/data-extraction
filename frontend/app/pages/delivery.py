@@ -2,16 +2,23 @@ import streamlit as st
 import pandas as pd
 import os
 import time
-from utils.api import get_order_details, update_manual_fields_api, update_master_row_api, sanitize_df
+from utils.api import (
+    get_order_details, 
+    update_manual_fields_api, 
+    update_master_row_api, 
+    sanitize_df,
+    search_shopify_orders_api,
+    upload_master_data_api
+)
 
 # Admin Credentials
 SUPERUSER_USERNAME = os.getenv("SUPERUSER_USERNAME", "admin")
 SUPERUSER_PASSWORD = os.getenv("SUPERUSER_PASSWORD", "admin")
 
 def delivery_management_page():
-    st.title("🚚 Delivery Management")
+    st.title("🚚 Order & Delivery Management")
     
-    # 0. Superuser Authentication
+    # 0. Superuser Authentication (Shared across sections)
     is_superuser = st.session_state.get("is_superuser", False)
     
     if not is_superuser:
@@ -27,242 +34,190 @@ def delivery_management_page():
                     else:
                         st.error("Invalid credentials")
 
-    # 1. VIEW AN ORDER
-    st.header("🔍 View Order Details")  
-    search_id = st.text_input("Enter Order ID to view", placeholder="e.g. 123456789")
-    if st.button("Search Database"):
-        if search_id:
-            try:
-                orders = get_order_details(search_id) # Returns a list now
-                st.session_state.delivery_search_results = orders
-                st.success(f"Found {len(orders)} record(s) for Order #{search_id}")
-            except Exception as e:
-                st.error(f"Order not found or error: {e}")
-                st.session_state.pop("delivery_search_results", None)
+    tab1, tab2 = st.tabs(["🗄️ Database Management", "🛍️ Shopify Integration"])
 
-    if st.session_state.get("delivery_search_results"):
-        orders = st.session_state.delivery_search_results
+    # SECTION 1: DATABASE MANAGEMENT
+    with tab1:
+        st.header("Search & Edit Database Records")
+        st.caption("Look up orders that have already been synced to the system.")
         
-        # Superuser Edit Mode
-        if is_superuser:
-            st.info("✏️ Edit Mode Enabled. Toggle changes and save to DB.")
-            df_display = sanitize_df(pd.DataFrame(orders))
+        search_id = st.text_input("Enter Order ID", placeholder="e.g. 123456789", key="db_search_input")
+        if st.button("🔍 Search Database", key="db_search_btn"):
+            if search_id:
+                try:
+                    orders = get_order_details(search_id)
+                    st.session_state.delivery_search_results = orders
+                    st.success(f"Found {len(orders)} record(s) for Order #{search_id}")
+                except Exception as e:
+                    st.error(f"Order not found in DB: {e}")
+                    st.session_state.pop("delivery_search_results", None)
+
+        if st.session_state.get("delivery_search_results"):
+            orders = st.session_state.delivery_search_results
+            first = orders[0]
+            st.subheader(f"Order #{first.get('ORDER ID')} - {first.get('NAME')}")
             
-            # Use data editor for admin
-            edited_df = st.data_editor(
-                df_display, 
-                use_container_width=True, 
-                hide_index=True, 
-                key="delivery_editor",
-                num_rows="fixed"
+            # Simplified Item List
+            item_list = ", ".join([f"{o.get('SKU')} ({o.get('QUANTITY')})" for o in orders])
+            st.markdown(f"**Items Found:** {item_list}")
+
+            # Detailed Breakdown per item
+            for idx, order in enumerate(orders):
+                sku_val = order.get('SKU')
+                with st.expander(f"📦 SKU: {sku_val} | Status: {order.get('STATUS')}", expanded=(idx == 0)):
+                    
+                    if is_superuser:
+                        # EDITABLE FORM FOR ADMIN
+                        with st.form(key=f"edit_form_{search_id}_{idx}"):
+                            st.write("### ✏️ Edit Order Record")
+                            
+                            c1, c2 = st.columns(2)
+                            with c1:
+                                new_name = st.text_input("Customer Name", value=order.get('NAME', ''))
+                                new_email = st.text_input("Email", value=order.get('EMAIL', ''))
+                                new_phone = st.text_input("Phone", value=order.get('  PHONE', '')) # Note space in key
+                            with c2:
+                                new_unit = st.text_input("House/Unit No", value=order.get('HOUSE UNIT NO', ''))
+                                new_addr = st.text_input("Address Line 1", value=order.get('ADDRESS LINE 1', ''))
+                                new_city = st.text_input("City", value=order.get('CITY', ''))
+                            
+                            st.write("---")
+                            p1, p2, p3 = st.columns(3)
+                            with p1:
+                                new_prod = st.text_input("Product", value=order.get('PRODUCT', ''))
+                                new_code = st.text_input("Product Code", value=order.get('PRODUCT CODE', ''))
+                            with p2:
+                                new_meal = st.text_input("Meal Type", value=order.get('MEAL TYPE', ''))
+                                new_plan = st.text_input("Meal Plan", value=order.get('MEAL PLAN', ''))
+                            with p3:
+                                new_qty = st.text_input("Quantity", value=order.get('QUANTITY', ''))
+                                new_status = st.selectbox("Status", options=["WIP", "PAUSE", "TBS", "LAST DAY", "CANCELLED", "DELIVERED"], index=0 if order.get('STATUS') not in ["WIP", "PAUSE", "TBS", "LAST DAY", "CANCELLED", "DELIVERED"] else ["WIP", "PAUSE", "TBS", "LAST DAY", "CANCELLED", "DELIVERED"].index(order.get('STATUS')))
+
+                            st.write("---")
+                            t1, t2 = st.columns(2)
+                            with t1:
+                                new_del = st.text_input("Delivery Method", value=order.get('DELIVERY', ''))
+                                new_time = st.text_input("Delivery Time", value=order.get('DELIVERY TIME', ''))
+                            with t2:
+                                new_ts = st.text_area("TS Notes", value=order.get('TS NOTES', ''))
+                                new_driver = st.text_area("Driver Note", value=order.get('DRIVER NOTE', ''))
+
+                            if st.form_submit_button("✅ Save Changes to Database"):
+                                updates = {
+                                    "NAME": new_name, "EMAIL": new_email, "  PHONE": new_phone,
+                                    "HOUSE UNIT NO": new_unit, "ADDRESS LINE 1": new_addr, "CITY": new_city,
+                                    "PRODUCT": new_prod, "PRODUCT CODE": new_code, "MEAL TYPE": new_meal,
+                                    "MEAL PLAN": new_plan, "QUANTITY": new_qty, "STATUS": new_status,
+                                    "DELIVERY": new_del, "DELIVERY TIME": new_time,
+                                    "TS NOTES": new_ts, "DRIVER NOTE": new_driver
+                                }
+                                try:
+                                    update_master_row_api(order.get("ORDER ID"), updates, order)
+                                    st.success("Successfully updated record!")
+                                    time.sleep(1)
+                                    # Refresh data
+                                    st.session_state.delivery_search_results = get_order_details(search_id)
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Save failed: {e}")
+                    else:
+                        # READ-ONLY VIEW (Same as before)
+                        c1, c2 = st.columns(2)
+                        with c1:
+                            st.write(f"**👤 Customer:** {order.get('NAME')} ({order.get('EMAIL')})")
+                            st.write(f"**📍 Address:** {order.get('HOUSE UNIT NO')} {order.get('ADDRESS LINE 1')}, {order.get('CITY')}")
+                        with c2:
+                            st.write(f"**🍽️ Product:** {order.get('PRODUCT')} [{order.get('STATUS')}]")
+                            st.write(f"**⏰ Timing:** {order.get('DELIVERY')} ({order.get('DELIVERY TIME')})")
+                        
+                        st.info(f"**Driver Note:** {order.get('DRIVER NOTE', 'None')}")
+                        st.caption(f"**TS Notes:** {order.get('TS NOTES', 'None')}")
+
+    # SECTION 2: SHOPIFY INTEGRATION
+    with tab2:
+        st.header("Shopify Live Search")
+        st.caption("Search directly in Shopify. Found orders can be uploaded to the Master Data.")
+        
+        search_q = st.text_input("Search Shopify (Name, ID, Email, Address, etc.)", placeholder="e.g. #1005 or customer name")
+        if st.button("🚀 Search Shopify"):
+            if search_q:
+                try:
+                    with st.spinner("Talking to Shopify..."):
+                        # 1. Fetch search results
+                        s_results = search_shopify_orders_api(search_q)
+                        if s_results.empty:
+                            st.warning("No matches found in Shopify.")
+                            st.session_state.pop("shopify_master_results", None)
+                        else:
+                            # 2. Apply same processing as Shopify Dashboard
+                            from utils.api import process_transformations_api
+                            processed, master = process_transformations_api(s_results)
+                            st.session_state.shopify_master_results = master
+                            st.success(f"Found and processed {len(master)} record(s) from Shopify")
+                except Exception as e:
+                    st.error(f"Shopify search failed: {e}")
+
+        if st.session_state.get("shopify_master_results") is not None:
+            sm_df = st.session_state.shopify_master_results
+            st.write("### Processed Results (Preview & Edit)")
+            st.info("✏️ You can edit the values below before syncing to the database.")
+            
+            # Editable Data View
+            edited_s_df = st.data_editor(
+                sm_df,
+                use_container_width=True,
+                hide_index=True,
+                num_rows="fixed",
+                key="shopify_sync_editor"
             )
             
-            if st.button("💾 Save Bulk Changes to DB"):
-                changes = st.session_state.get("delivery_editor")
-                if changes:
-                    edits = changes.get("edited_rows", {})
-                    success_count = 0
-                    
-                    try:
-                        for row_idx, new_values in edits.items():
-                            idx_label = int(row_idx)
-                            original_series = df_display.iloc[idx_label]
-                            
-                            oid = original_series.get("ORDER ID")
-                            original_row_dict = {
-                                k: str(v) if v is not None else "" 
-                                for k, v in original_series.to_dict().items()
-                            }
-                            
-                            if oid:
-                                update_master_row_api(oid, new_values, original_row_dict)
-                                success_count += 1
+            if st.button("⬆️ Upload to Master Database"):
+                try:
+                    with st.spinner("Uploading records..."):
+                        # Get data from editor
+                        upload_data = edited_s_df.where(pd.notnull(edited_s_df), None).to_dict(orient="records")
                         
-                        if success_count > 0:
-                            st.success(f"Successfully updated {success_count} rows!")
-                            time.sleep(1)
-                            # Refresh data
-                            orders = get_order_details(search_id)
-                            st.session_state.delivery_search_results = orders
-                            st.rerun()
-                    except Exception as e:
-                        st.error(f"Save failed: {e}")
-                else:
-                    st.warning("No changes detected.")
-            st.divider()
-
-        # Global Header Info (from first item)
-        first = orders[0]
-        st.subheader(f"Order #{first.get('ORDER ID')} - {first.get('NAME')}")
-        
-        # Show items in a tidy table first
-        item_summary = []
-        for o in orders:
-            item_summary.append({
-                "SKU": o.get("SKU"),
-                "PRODUCT": o.get("PRODUCT"),
-                "QTY": o.get("QUANTITY"),
-                "STATUS": o.get("STATUS")
-            })
-        st.write("**📦 Order Items (SKUs)**")
-        st.dataframe(pd.DataFrame(item_summary), hide_index=True, use_container_width=True)
-
-        # Detailed Breakdown per item
-        for idx, order in enumerate(orders):
-            sku_val = order.get('SKU')
-            with st.expander(f"Details: {sku_val}", expanded=(idx == 0)):
-                # Copy Button Area
-                st.write("**SKU Code (Click icon to copy)**")
-                st.code(sku_val, language=None)
-                
-                # Header with Status
-                status = order.get('STATUS', 'UNKNOWN').upper()
-                st.write(f"**Item Status:** {status}")
-                if status == 'PAUSE':
-                    st.warning(f"Note: This item is PAUSED. {order.get('TS NOTES', '')}")
-                
-                # Row 1: Customer & Address
-                c1, c2 = st.columns(2)
-                with c1:
-                    st.write("**👤 Customer Info**")
-                    st.write(f"Name: {order.get('NAME')}")
-                    st.write(f"Email: {order.get('EMAIL')}")
-                    st.write(f"Phone: {order.get('  PHONE')}")
-                with c2:
-                    st.write("**📍 Delivery Address**")
-                    st.write(f"{order.get('HOUSE UNIT NO')} {order.get('ADDRESS LINE 1')}")
-                    st.write(f"{order.get('CITY')}, {order.get('ZIP')}")
-
-                # Row 2: Product Info
-                st.write("---")
-                p1, p2, p3 = st.columns([2,1,1])
-                with p1:
-                    st.write("**📦 Product Details**")
-                    st.write(f"{order.get('PRODUCT')} ({order.get('PRODUCT CODE')})")
-                    st.caption(order.get('DESCRIPTION', ''))
-                with p2:
-                    st.write("**🍽️ Plan**")
-                    st.write(f"Type: {order.get('MEAL TYPE')}")
-                    st.write(f"Plan: {order.get('MEAL PLAN')}")
-                with p3:
-                    st.write("**🔢 Quantity**")
-                    st.write(f"Qty: {order.get('QUANTITY')}")
-                    st.write(f"Days: {order.get('DAYS')}")
-
-                # Row 3: Timings & Notes
-                st.write("---")
-                t1, t2 = st.columns(2)
-                with t1:
-                    st.write("**⏰ Delivery Timing**")
-                    st.write(f"Method: {order.get('DELIVERY')}")
-                    st.write(f"Time: {order.get('DELIVERY TIME')}")
-                    st.write(f"Upstair: {order.get('UPSTAIR DELIVERY')}")
-                with t2:
-                    st.write("**📝 Delivery Notes**")
-                    st.info(order.get('DRIVER NOTE', 'No driver notes'))
-
-                # Row 4: Skip History
-                st.write("---")
-                st.write("**⏭️ Skip History**")
-                skips = [order.get(f"SKIP{i}") for i in range(1, 21) if order.get(f"SKIP{i}") not in ['0', '', None]]
-                if skips:
-                    st.write(", ".join(skips))
-                else:
-                    st.write("No skip dates recorded.")
+                        res = upload_master_data_api(upload_data)
+                        st.success(f"Upload Complete! New: {res.get('inserted')}, Updated: {res.get('updated')}")
+                        time.sleep(1)
+                        st.session_state.pop("shopify_master_results", None)
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Upload Failed: {e}")
 
     st.divider()
 
-    # 2. SKIP MANAGEMENT
-    st.header("⏭️ Skip Management")
-    
-    with st.expander("Update Skip Records", expanded=True):
-        st.write("Manage, add, or clear specific skip slots for an order.")
-        m_skip_oid = st.text_input("Order ID", key="skip_manual_oid")
-        if st.button("Load Order Slots"):
+    # SECTION 3: SKIP MANAGEMENT (Independent or linked?)
+    st.header("⏭️ Skip Slots Management")
+    with st.expander("Manage Skip History (Date Slots)"):
+        m_skip_oid = st.text_input("Enter Order ID to manage skips", key="skip_manual_oid")
+        if st.button("Load Skip Slots"):
             if m_skip_oid:
                 try:
-                    order = get_order_details(m_skip_oid)
-                    st.session_state[f"edit_slots_{m_skip_oid}"] = order
-                    st.success(f"Loaded {len(order)} item(s) for Order #{m_skip_oid}")
+                    skip_orders = get_order_details(m_skip_oid)
+                    st.session_state[f"edit_slots_{m_skip_oid}"] = skip_orders
+                    st.success(f"Loaded {len(skip_orders)} item(s)")
                 except Exception as e:
-                    st.error(f"Order not found: {e}")
-            else:
-                st.warning("Enter an Order ID first")
+                    st.error(f"Order not found in DB: {e}")
 
         if f"edit_slots_{m_skip_oid}" in st.session_state:
+            # Existing skip management UI...
             orders_list = st.session_state[f"edit_slots_{m_skip_oid}"]
+            selected_row = st.selectbox("Select variant", orders_list, format_func=lambda o: f"{o.get('SKU')} - {o.get('MEAL TYPE')}")
             
-            # Detailed row selection
-            selected_row = None
-            if len(orders_list) > 1:
-                # Create detailed label for each row
-                options = []
-                for o in orders_list:
-                    label = (f"SKU: {o.get('SKU')} | "
-                             f"{o.get('MEAL TYPE')} | "
-                             f"{o.get('MEAL PLAN')} | "
-                             f"{o.get('DELIVERY TIME')} | "
-                             f"Addr: {o.get('ADDRESS LINE 1', '')}")
-                    options.append(label)
-                
-                choice = st.selectbox("Multiple items found. Select the correct one to update:", options)
-                selected_row = orders_list[options.index(choice)]
-            else:
-                selected_row = orders_list[0]
-            
-            with st.form("skip_manual_edit_form"):
-                st.write(f"### Editing Slots")
-                st.write(f"**Item:** {selected_row.get('PRODUCT')} ({selected_row.get('SKU')})")
-                st.write(f"**Plan:** {selected_row.get('MEAL TYPE')} - {selected_row.get('MEAL PLAN')} ({selected_row.get('DELIVERY TIME')})")
-                st.write(f"**Address:** {selected_row.get('HOUSE UNIT NO')} {selected_row.get('ADDRESS LINE 1')}")
-                
+            with st.form("skip_mgmt_form"):
+                cols = st.columns(5)
                 new_skips = {}
-                cols = st.columns(4)
                 for i in range(1, 21):
                     field = f"SKIP{i}"
-                    current_val = selected_row.get(field, "0")
-                    with cols[(i-1)%4]:
-                        new_skips[field] = st.text_input(field, value=current_val)
+                    with cols[(i-1)%5]:
+                        new_skips[field] = st.text_input(field, value=selected_row.get(field, "0"))
                 
-                c1, c2 = st.columns([1, 4])
-                with c1:
-                    clear_all = st.checkbox("Clear all 20 slots", help="Replaces all values with '0'")
-                
-                if st.form_submit_button("Save Changes"):
+                if st.form_submit_button("Update Skips"):
                     try:
-                        if clear_all:
-                            sku_mapped = {f"SKU{i}": "0" for i in range(1, 21)}
-                        else:
-                            # If value is empty or just spaces, default to "0"
-                            sku_mapped = {
-                                k.replace("SKIP", "SKU"): (v.strip() if v and v.strip() else "0") 
-                                for k, v in new_skips.items()
-                            }
-                        
-                        # Use all identifying fields for the update to ensure precision
-                        filters = {
-                            "MEAL TYPE": selected_row.get("MEAL TYPE"),
-                            "MEAL PLAN": selected_row.get("MEAL PLAN"),
-                            "DELIVERY TIME": selected_row.get("DELIVERY TIME"),
-                            "ADDRESS LINE 1": selected_row.get("ADDRESS LINE 1")
-                        }
-                        
-                        update_manual_fields_api(
-                            m_skip_oid, 
-                            None, 
-                            sku_mapped, 
-                            sku=selected_row.get('SKU'),
-                            extra_filters=filters
-                        )
-                        st.success("✅ Changes Saved")
-                        st.toast("Updated database successfully!", icon="✅")
-                        
-                        # Update the session state to reflect new values immediately
-                        # This keeps the UI 'as is' but with the new data
-                        for k, v in new_skips.items():
-                            selected_row[k] = v
-                            
-                        # Refresh the cached list in session state
-                        st.session_state[f"edit_slots_{m_skip_oid}"] = orders_list
+                        sku_mapped = {k.replace("SKIP", "SKU"): v for k, v in new_skips.items()}
+                        update_manual_fields_api(selected_row.get("ORDER ID"), None, sku_mapped, sku=selected_row.get('SKU'))
+                        st.success("Updated Successfully!")
+                        st.rerun()
                     except Exception as e:
-                        st.error(f"Failed to update: {e}")
+                        st.error(f"Failed: {e}")

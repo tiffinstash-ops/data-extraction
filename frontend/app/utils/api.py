@@ -1,6 +1,7 @@
 import requests
 import pandas as pd
 import os
+import numpy as np
 
 # Configuration
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
@@ -8,14 +9,31 @@ SUPERUSER_USERNAME = os.getenv("SUPERUSER_USERNAME")
 SUPERUSER_PASSWORD = os.getenv("SUPERUSER_PASSWORD")
 
 def sanitize_df(df):
-    for col in df.columns:
-        if df[col].dtype == 'object':
-            df[col] = df[col].fillna('').astype(str)
-    return df
+    if df.empty:
+        return df
+    return df.fillna('').astype(str)
+
+def clean_dict(d):
+    """Deeply clean a dictionary for JSON compliance and stringify for DB matching"""
+    if not isinstance(d, dict):
+        return d
+    new_d = {}
+    for k, v in d.items():
+        if v is None or (isinstance(v, float) and (np.isnan(v) or np.isinf(v))):
+            new_d[k] = ""
+        else:
+            new_d[k] = str(v)
+    return new_d
 
 def fetch_orders_from_api(start_date, end_date):
     params = {"start_date": start_date, "end_date": end_date}
     resp = requests.get(f"{BACKEND_URL}/orders", params=params)
+    resp.raise_for_status()
+    return sanitize_df(pd.DataFrame(resp.json()))
+
+def search_shopify_orders_api(query):
+    params = {"q": query}
+    resp = requests.get(f"{BACKEND_URL}/shopify/search", params=params)
     resp.raise_for_status()
     return sanitize_df(pd.DataFrame(resp.json()))
 
@@ -58,10 +76,11 @@ def update_manual_fields_api(order_id, tl_notes, skus, sku=None, extra_filters=N
     return resp.json()
 
 def upload_master_data_api(data, table_name="historical-data"):
-    # Sends table_name and data to backend
+    # Clean each row in the list
+    cleaned_data = [clean_dict(row) for row in data]
     payload = {
         "table_name": table_name,
-        "data": data
+        "data": cleaned_data
     }
     resp = requests.post(f"{BACKEND_URL}/upload-master-data", json=payload)
     resp.raise_for_status()
@@ -69,11 +88,22 @@ def upload_master_data_api(data, table_name="historical-data"):
 
 def update_master_row_api(order_id, updates, original_row, table_name="historical-data"):
     payload = {
+        "table_name": table_name,
         "order_id": str(order_id), 
-        "updates": updates,
-        "original_row": original_row
+        "updates": clean_dict(updates),
+        "original_row": clean_dict(original_row)
     }
-    resp = requests.post(f"{BACKEND_URL}/update-master-row", params={"table_name": table_name}, json=payload)
+    resp = requests.post(f"{BACKEND_URL}/update-master-row", json=payload)
+    resp.raise_for_status()
+    return resp.json()
+
+def delete_master_row_api(order_id, original_row, table_name="historical-data"):
+    payload = {
+        "table_name": table_name,
+        "order_id": str(order_id), 
+        "original_row": clean_dict(original_row)
+    }
+    resp = requests.post(f"{BACKEND_URL}/remove-master-record", json=payload)
     resp.raise_for_status()
     return resp.json()
 
@@ -81,7 +111,6 @@ def final_pivot_df(df, delivery_time):
     if df.empty:
         return pd.DataFrame()
         
-    # Standardize column names if needed (handle both space and underscore)
     df_clean = df.copy()
     if "DELIVERY TIME" not in df_clean.columns and "DELIVERY_TIME" in df_clean.columns:
         df_clean = df_clean.rename(columns={"DELIVERY_TIME": "DELIVERY TIME"})
@@ -89,28 +118,30 @@ def final_pivot_df(df, delivery_time):
     if "DELIVERY TIME" not in df_clean.columns:
         return pd.DataFrame()
         
-    # Normalize delivery time for robust filtering
+    # Standardize types and strings
     df_clean["DELIVERY TIME"] = df_clean["DELIVERY TIME"].astype(str).str.strip().str.upper()
     target = str(delivery_time).strip().upper()
     
+    # Filter
     filtered_df = df_clean[df_clean["DELIVERY TIME"] == target].copy()
     if filtered_df.empty:
         return pd.DataFrame()
         
-    # Ensure QUANTITY is numeric
+    # Convert Quantity to numeric
     filtered_df['QUANTITY'] = pd.to_numeric(filtered_df['QUANTITY'], errors='coerce').fillna(0)
     
-    # Aggregated View Columns
-    group_cols = ['PRODUCT', 'MEAL PLAN', 'DESCRIPTION', 'LABEL', 'SELLER NOTE']
-
+    # Aggressive Grouping for Summary
+    group_cols = ['PRODUCT', 'MEAL PLAN']
     group_cols = [c for c in group_cols if c in filtered_df.columns]
     
-    filtered_df["DESCRIPTION"] = filtered_df["DESCRIPTION"].replace("", "YOUR CUSTOMER")
     # Group and Sum
     pivot_df = filtered_df.groupby(group_cols, as_index=False)["QUANTITY"].sum()
     
-    # Sort by Product for readability
+    # Final cleanup: ensure we only return the grouped columns and the sum
+    final_cols = group_cols + ["QUANTITY"]
+    pivot_df = pivot_df[final_cols]
+    
     if "PRODUCT" in pivot_df.columns:
         pivot_df = pivot_df.sort_values("PRODUCT")
-
+        
     return pivot_df

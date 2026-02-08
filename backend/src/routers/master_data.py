@@ -8,7 +8,7 @@ import re
 import logging
 
 from src.core.database import get_db_engine
-from src.schemas import MasterRowUpdate, SkipUpdate, MasterUploadRequest
+from src.schemas import MasterRowUpdate, SkipUpdate, MasterUploadRequest, MasterRowDelete
 from src.utils.constants import SHOPIFY_ORDER_FIELDNAMES
 
 from src.core.models import ActiveOrderStatuses
@@ -16,14 +16,18 @@ from src.core.models import ActiveOrderStatuses
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+@router.get("/master-health")
+def master_health():
+    return {"status": "master router is reachable"}
+
 @router.get("/master-data")
 def get_all_master_data(table_name: str = "historical-data", only_active: bool = True):
     engine, connector = get_db_engine()
     try:
         with engine.connect() as conn:
             if only_active:
-                statuses = "', '".join([s.value for s in ActiveOrderStatuses])
-                query = f'SELECT * FROM "{table_name}" WHERE "STATUS" IN (\'{statuses}\') OR "STATUS" IS NULL ORDER BY "ORDER ID" ASC;'
+                # Active is defined as everything except DELIVERED or CANCELLED
+                query = f'SELECT * FROM "{table_name}" WHERE ("STATUS" NOT IN (\'DELIVERED\', \'CANCELLED\') OR "STATUS" IS NULL) ORDER BY "ORDER ID" ASC;'
             else:
                 query = f'SELECT * FROM "{table_name}" ORDER BY "ORDER ID" ASC;'
             df = pd.read_sql(query, engine)
@@ -43,7 +47,8 @@ def get_all_master_data(table_name: str = "historical-data", only_active: bool =
         connector.close()
 
 @router.post("/update-master-row")
-def update_master_row(update: MasterRowUpdate, table_name: str = "historical-data"):
+def update_master_row(update: MasterRowUpdate):
+    table_name = update.table_name
     engine, connector = get_db_engine()
     try:
         with engine.connect() as conn:
@@ -81,19 +86,13 @@ def update_master_row(update: MasterRowUpdate, table_name: str = "historical-dat
                 # Ideally, we just check equality.
                 # Note: valid_updates keys shouldn't be used here, we use original_row values
                 
-                # Sanitize param key
-                # We need to be careful about matching empty strings vs NULLs depending on DB state.
-                # For safety, stringify everything.
+                param_key = f"cond_{re.sub(r'[^a-zA-Z0-9_]', '_', k.strip())}"
                 
-                param_key = f"cond_{k.replace(' ', '_')}"
-                
-                # Handle special characters in column names if necessary, 
-                # but simplistic replacing of space should cover most.
-                # Also handle if the column name itself has special chars.
-                # Quoting "k" handles column name safety.
-                
-                where_parts.append(f'"{k}" = :{param_key}')
-                params[param_key] = str(v)
+                if v is None or str(v).lower() in ["nan", "none", ""]:
+                    where_parts.append(f'(CAST("{k}" AS TEXT) IS NULL OR CAST("{k}" AS TEXT) = \'\' OR CAST("{k}" AS TEXT) = \'nan\')')
+                else:
+                    where_parts.append(f'CAST("{k}" AS TEXT) = :{param_key}')
+                    params[param_key] = str(v)
 
             where_str = " AND ".join(where_parts)
             
@@ -172,63 +171,41 @@ def upload_master_data(request: MasterUploadRequest):
                 }
                 
                 try:
-                    # Check for existence
-                    # We use ORDER ID + SKU as the composite key to distinguish line items
+                    # 4. Check for existence (Composite Key: ORDER ID + SKU)
                     sku_val = valid_row.get("SKU")
                     exists = None
                     
-                    if sku_val is not None:
-                        # Select * to compare values for duplicate check
-                        check_sql = text(f'SELECT * FROM "{table_name}" WHERE "ORDER ID" = :ORDER_ID AND "SKU" = :SKU')
-                        exists = conn.execute(check_sql, {"ORDER_ID": oid, "SKU": sku_val}).fetchone()
+                    if sku_val:
+                        check_sql = text(f'SELECT * FROM "{table_name}" WHERE "ORDER ID" = :oid AND "SKU" = :sku')
+                        exists = conn.execute(check_sql, {"oid": str(oid), "sku": str(sku_val)}).fetchone()
                     else:
-                        # Fallback if no SKU provided
-                        check_sql = text(f'SELECT * FROM "{table_name}" WHERE "ORDER ID" = :ORDER_ID')
-                        exists = conn.execute(check_sql, {"ORDER_ID": oid}).fetchone()
+                        check_sql = text(f'SELECT * FROM "{table_name}" WHERE "ORDER ID" = :oid AND "SKU" IS NULL')
+                        exists = conn.execute(check_sql, {"oid": str(oid)}).fetchone()
                     
                     if exists:
-                        # Check for Exact Duplicate (Idempotency)
-                        # If all values in the incoming row match the existing DB row, we skip the update.
+                        # Normalize for comparison/idempotency check
                         existing_data = dict(exists._mapping)
                         is_duplicate = True
-                        
                         for k, v in valid_row.items():
-                            # keys like ORDER ID and SKU match by definition of how we found the row
-                            if k == "ORDER ID" or k == "SKU": 
-                                continue 
-                            
-                            # Normalize for comparison
-                            # params[safe_param(k)] has the cleaned incoming value (None if "")
-                            inc_val = params[safe_param(k)]
-                            db_val = existing_data.get(k)
-                            
-                            # Compare as strings to handle type differences (e.g. 10 vs "10")
-                            # Treat None and "" as identical
-                            s_inc = str(inc_val) if inc_val is not None and inc_val != "" else ""
-                            s_db = str(db_val) if db_val is not None and db_val != "" else ""
-                            
+                            if k in ["ORDER ID", "SKU"]: continue
+                            s_inc = str(params[safe_param(k)]) if params[safe_param(k)] is not None else ""
+                            s_db = str(existing_data.get(k)) if existing_data.get(k) is not None else ""
                             if s_inc != s_db:
                                 is_duplicate = False
                                 break
                         
                         if is_duplicate:
-                            # Skip update, it's already identical
                             skipped_count += 1
                             continue
 
                         # UPDATE existing record
-                        set_parts = [
-                            f'"{k}" = :{safe_param(k)}'
-                            for k in valid_row.keys()
-                            if k != "ORDER ID" and k != "SKU"
-                        ]
+                        set_parts = [f'"{k}" = :{safe_param(k)}' for k in valid_row.keys() if k not in ["ORDER ID", "SKU"]]
                         if set_parts:
                             set_str = ", ".join(set_parts)
+                            where_clause = '"ORDER ID" = :oid'
+                            if sku_val: where_clause += ' AND "SKU" = :sku'
+                            else: where_clause += ' AND "SKU" IS NULL'
                             
-                            where_clause = '"ORDER ID" = :ORDER_ID'
-                            if sku_val is not None:
-                                where_clause += ' AND "SKU" = :SKU'
-                                
                             sql = text(f'UPDATE "{table_name}" SET {set_str} WHERE {where_clause}')
                             conn.execute(sql, params)
                             updated_count += 1
@@ -236,7 +213,6 @@ def upload_master_data(request: MasterUploadRequest):
                         # INSERT new record
                         cols_str = ", ".join([f'"{k}"' for k in valid_row.keys()])
                         vals_str = ", ".join([f":{safe_param(k)}" for k in valid_row.keys()])
-                        
                         sql = text(f'INSERT INTO "{table_name}" ({cols_str}) VALUES ({vals_str})')
                         conn.execute(sql, params)
                         success_count += 1
@@ -258,6 +234,75 @@ def upload_master_data(request: MasterUploadRequest):
             }
     except Exception as e:
         logger.error(f"Upload error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        connector.close()
+
+@router.get("/deliveries")
+def get_deliveries(table_name: str = "historical-data"):
+    engine, connector = get_db_engine()
+    try:
+        with engine.connect() as conn:
+            query = f'SELECT * FROM "{table_name}" ORDER BY "ORDER ID" ASC LIMIT 1000;'
+            df = pd.read_sql(query, engine)
+            
+            # Clean dataframe for JSON serialization
+            df = df.replace([np.inf, -np.inf], np.nan)
+            df = df.astype(object).where(pd.notnull(df), None)
+            
+            return df.to_dict(orient="records")
+    except Exception as e:
+        logger.error(f"Error fetching deliveries: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        connector.close()
+
+@router.post("/remove-master-record")
+def delete_master_row(req: MasterRowDelete):
+    print(f"DEBUG: Received remove request for {req.order_id}")
+    table_name = req.table_name
+    engine, connector = get_db_engine()
+    try:
+        with engine.connect() as conn:
+            # 1. Get valid columns for this table to avoid querying missing columns
+            col_query = text(f"SELECT column_name FROM information_schema.columns WHERE table_name = :table")
+            db_cols = [r[0] for r in conn.execute(col_query, {"table": table_name}).fetchall()]
+            
+            if not db_cols:
+                raise HTTPException(status_code=404, detail=f"Table '{table_name}' not found.")
+
+            # 2. Identify record using ONLY Order ID and SKU as requested
+            where_parts = []
+            params = {"oid": str(req.order_id).strip()}
+            where_parts.append('"ORDER ID" = :oid')
+            
+            # Extract SKU from the original row data
+            sku_val = next((v for k, v in req.original_row.items() if k.upper() == "SKU"), None)
+            
+            if sku_val is None or str(sku_val).lower() in ["nan", "none", ""]:
+                where_parts.append('("SKU" IS NULL OR CAST("SKU" AS TEXT) = \'\' OR CAST("SKU" AS TEXT) = \'nan\')')
+            else:
+                where_parts.append('TRIM("SKU") = :sku')
+                params["sku"] = str(sku_val).strip()
+
+            where_str = " AND ".join(where_parts)
+            sql = text(f'DELETE FROM "{table_name}" WHERE {where_str}')
+            
+            logger.info(f"Executing Minimal Delete: {sql} | Params: {params}")
+            result = conn.execute(sql, params)
+            conn.commit()
+            
+            if result.rowcount == 0:
+                raise HTTPException(
+                    status_code=404, 
+                    detail=f"Record not found for #{req.order_id}. The fingerprint did not match any database row."
+                )
+            
+            return {"status": "success", "deleted": result.rowcount}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Delete Master Row error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         connector.close()
@@ -309,20 +354,3 @@ def skip_order(update: SkipUpdate, table_name: str = "historical-data"):
     finally:
         connector.close()
 
-@router.get("/deliveries")
-def get_deliveries(table_name: str = "historical-data"):
-    engine, connector = get_db_engine()
-    try:
-        with engine.connect() as conn:
-            query = f'SELECT * FROM "{table_name}" ORDER BY "ORDER ID" ASC LIMIT 1000;'
-            df = pd.read_sql(query, engine)
-            
-            # Clean dataframe for JSON serialization
-            df = df.replace([np.inf, -np.inf], np.nan)
-            df = df.astype(object).where(pd.notnull(df), None)
-            
-            return df.to_dict(orient="records")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        connector.close()

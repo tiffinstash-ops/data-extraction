@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Any
 
 class OrderUpdate(BaseModel):
     order_id: str
@@ -14,10 +14,16 @@ class SkipUpdate(BaseModel):
     skip_date: str
 
 class MasterRowUpdate(BaseModel):
+    table_name: str = "historical-data"
     order_id: str
-    original_row: Dict[str, str] # Full fingerprint of the row before edit
-    updates: Dict[str, str]
+    original_row: Dict[str, Any] # Full fingerprint of the row before edit
+    updates: Dict[str, Any]
 
 class MasterUploadRequest(BaseModel):
     table_name: str = "historical-data"
     data: List[Dict]
+
+class MasterRowDelete(BaseModel):
+    table_name: str = "historical-data"
+    order_id: str
+    original_row: Dict[str, Any]

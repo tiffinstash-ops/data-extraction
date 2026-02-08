@@ -71,7 +71,7 @@ def main():
     # Static Pages
     pages = [
         st.Page(dashboard_page, title="Shopify Dashboard", icon="🛍️"),
-        st.Page(delivery_management_page, title="Delivery Management", icon="🚚"),
+        st.Page(delivery_management_page, title="Order Management", icon="🚚"),
         st.Page(seller_data_page, title="Seller Data", icon="📑"),
         st.Page(master_database_page, title="Master Database", icon="🗄️"),
     ]
