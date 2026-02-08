@@ -17,3 +17,7 @@ class MasterRowUpdate(BaseModel):
     order_id: str
     original_row: Dict[str, str] # Full fingerprint of the row before edit
     updates: Dict[str, str]
+
+class MasterUploadRequest(BaseModel):
+    table_name: str = "historical-data"
+    data: List[Dict]

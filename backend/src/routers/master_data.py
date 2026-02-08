@@ -8,21 +8,24 @@ import re
 import logging
 
 from src.core.database import get_db_engine
-from src.schemas import MasterRowUpdate, SkipUpdate
+from src.schemas import MasterRowUpdate, SkipUpdate, MasterUploadRequest
 from src.utils.constants import SHOPIFY_ORDER_FIELDNAMES
 
-from src.core.models import OrderStatus
+from src.core.models import ActiveOrderStatuses
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 @router.get("/master-data")
-def get_all_master_data():
+def get_all_master_data(table_name: str = "historical-data", only_active: bool = True):
     engine, connector = get_db_engine()
     try:
         with engine.connect() as conn:
-            statuses = "', '".join([s.value for s in OrderStatus])
-            query = f"SELECT * FROM \"historical-data\" WHERE \"STATUS\" IN ('{statuses}') OR \"STATUS\" IS NULL ORDER BY \"ORDER ID\" ASC;"
+            if only_active:
+                statuses = "', '".join([s.value for s in ActiveOrderStatuses])
+                query = f'SELECT * FROM "{table_name}" WHERE "STATUS" IN (\'{statuses}\') OR "STATUS" IS NULL ORDER BY "ORDER ID" ASC;'
+            else:
+                query = f'SELECT * FROM "{table_name}" ORDER BY "ORDER ID" ASC;'
             df = pd.read_sql(query, engine)
 
             # Clean dataframe for JSON serialization
@@ -40,7 +43,7 @@ def get_all_master_data():
         connector.close()
 
 @router.post("/update-master-row")
-def update_master_row(update: MasterRowUpdate):
+def update_master_row(update: MasterRowUpdate, table_name: str = "historical-data"):
     engine, connector = get_db_engine()
     try:
         with engine.connect() as conn:
@@ -94,7 +97,7 @@ def update_master_row(update: MasterRowUpdate):
 
             where_str = " AND ".join(where_parts)
             
-            sql = text(f'UPDATE "historical-data" SET {set_str} WHERE {where_str}')
+            sql = text(f'UPDATE "{table_name}" SET {set_str} WHERE {where_str}')
             
             result = conn.execute(sql, params)
             conn.commit()
@@ -113,16 +116,21 @@ def update_master_row(update: MasterRowUpdate):
         connector.close()
         
 @router.post("/upload-master-data")
-def upload_master_data(data: List[Dict]):
+def upload_master_data(request: MasterUploadRequest):
+    data = request.data
+    table_name = request.table_name
     # Note: Authentication should be handled via the frontend logic as requested
     engine, connector = get_db_engine()
     try:
         with engine.connect() as conn:
             # 1. Get existing columns in the table to filter incoming data
-            col_query = text("SELECT column_name FROM information_schema.columns WHERE table_name = 'historical-data'")
-            db_cols = [r[0] for r in conn.execute(col_query).fetchall()]
-            logger.info(f"Target Table Columns for validation: {db_cols}")
+            col_query = text(f"SELECT column_name FROM information_schema.columns WHERE table_name = :table")
+            db_cols = [r[0] for r in conn.execute(col_query, {"table": table_name}).fetchall()]
+            logger.info(f"Target Table ({table_name}) Columns for validation: {db_cols}")
             
+            if not db_cols:
+                raise HTTPException(status_code=404, detail=f"Table '{table_name}' not found or has no columns.")
+
             success_count = 0
             updated_count = 0
             skipped_count = 0
@@ -171,11 +179,11 @@ def upload_master_data(data: List[Dict]):
                     
                     if sku_val is not None:
                         # Select * to compare values for duplicate check
-                        check_sql = text('SELECT * FROM "historical-data" WHERE "ORDER ID" = :ORDER_ID AND "SKU" = :SKU')
+                        check_sql = text(f'SELECT * FROM "{table_name}" WHERE "ORDER ID" = :ORDER_ID AND "SKU" = :SKU')
                         exists = conn.execute(check_sql, {"ORDER_ID": oid, "SKU": sku_val}).fetchone()
                     else:
                         # Fallback if no SKU provided
-                        check_sql = text('SELECT * FROM "historical-data" WHERE "ORDER ID" = :ORDER_ID')
+                        check_sql = text(f'SELECT * FROM "{table_name}" WHERE "ORDER ID" = :ORDER_ID')
                         exists = conn.execute(check_sql, {"ORDER_ID": oid}).fetchone()
                     
                     if exists:
@@ -221,7 +229,7 @@ def upload_master_data(data: List[Dict]):
                             if sku_val is not None:
                                 where_clause += ' AND "SKU" = :SKU'
                                 
-                            sql = text(f'UPDATE "historical-data" SET {set_str} WHERE {where_clause}')
+                            sql = text(f'UPDATE "{table_name}" SET {set_str} WHERE {where_clause}')
                             conn.execute(sql, params)
                             updated_count += 1
                     else:
@@ -229,7 +237,7 @@ def upload_master_data(data: List[Dict]):
                         cols_str = ", ".join([f'"{k}"' for k in valid_row.keys()])
                         vals_str = ", ".join([f":{safe_param(k)}" for k in valid_row.keys()])
                         
-                        sql = text(f'INSERT INTO "historical-data" ({cols_str}) VALUES ({vals_str})')
+                        sql = text(f'INSERT INTO "{table_name}" ({cols_str}) VALUES ({vals_str})')
                         conn.execute(sql, params)
                         success_count += 1
                     
@@ -255,12 +263,12 @@ def upload_master_data(data: List[Dict]):
         connector.close()
 
 @router.post("/skip-order")
-def skip_order(update: SkipUpdate):
+def skip_order(update: SkipUpdate, table_name: str = "historical-data"):
     engine, connector = get_db_engine()
     try:
         with engine.connect() as conn:
             # 1. Fetch rows matching order_id (and optionally SKU)
-            sql = 'SELECT * FROM "historical-data" WHERE "ORDER ID" = :oid'
+            sql = f'SELECT * FROM "{table_name}" WHERE "ORDER ID" = :oid'
             params = {"oid": update.order_id, "val": update.skip_date}
             
             if update.sku:
@@ -286,7 +294,7 @@ def skip_order(update: SkipUpdate):
                 raise HTTPException(status_code=400, detail="Skip capacity full for this SKU/Order.")
             
             # 3. Update the slot (using SKU filter if provided to ensure precision)
-            update_sql = f'UPDATE "historical-data" SET "{target_col}" = :val WHERE "ORDER ID" = :oid'
+            update_sql = f'UPDATE "{table_name}" SET "{target_col}" = :val WHERE "ORDER ID" = :oid'
             if update.sku:
                 update_sql += ' AND "SKU" = :sku'
             
@@ -302,11 +310,11 @@ def skip_order(update: SkipUpdate):
         connector.close()
 
 @router.get("/deliveries")
-def get_deliveries():
+def get_deliveries(table_name: str = "historical-data"):
     engine, connector = get_db_engine()
     try:
         with engine.connect() as conn:
-            query = 'SELECT * FROM "historical-data" ORDER BY "ORDER ID" ASC LIMIT 1000;'
+            query = f'SELECT * FROM "{table_name}" ORDER BY "ORDER ID" ASC LIMIT 1000;'
             df = pd.read_sql(query, engine)
             
             # Clean dataframe for JSON serialization

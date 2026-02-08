@@ -1,5 +1,5 @@
 import streamlit as st
-from datetime import datetime
+from datetime import datetime, timedelta
 from utils.api import (
     fetch_orders_from_api,
     process_transformations_api,
@@ -14,7 +14,7 @@ def dashboard_page():
 
     col1, col2 = st.columns(2)
     with col1:
-        s_date = st.date_input("Start Date", value=datetime.now())
+        s_date = st.date_input("Start Date", value=datetime.now().date() - timedelta(days=1))
     with col2:
         e_date = st.date_input("End Date", value=datetime.now())
 
@@ -32,6 +32,13 @@ def dashboard_page():
 
     if st.session_state.get("master_data") is not None:
         st.header("Shopify Data Preview")
+        
+        # Simple search
+        search = st.text_input("Filter database view")
+        if search:
+            mask = st.session_state.master_data.astype(str).apply(lambda x: x.str.contains(search, case=False, na=False)).any(axis=1)
+            st.session_state.master_data = st.session_state.master_data[mask]
+
         st.dataframe(
             st.session_state.master_data, use_container_width=True, hide_index=True
         )

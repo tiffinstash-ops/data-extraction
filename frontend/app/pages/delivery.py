@@ -1,10 +1,32 @@
 import streamlit as st
 import pandas as pd
-from utils.api import get_order_details, update_manual_fields_api
+import os
+import time
+from utils.api import get_order_details, update_manual_fields_api, update_master_row_api, sanitize_df
+
+# Admin Credentials
+SUPERUSER_USERNAME = os.getenv("SUPERUSER_USERNAME", "admin")
+SUPERUSER_PASSWORD = os.getenv("SUPERUSER_PASSWORD", "admin")
 
 def delivery_management_page():
     st.title("🚚 Delivery Management")
     
+    # 0. Superuser Authentication
+    is_superuser = st.session_state.get("is_superuser", False)
+    
+    if not is_superuser:
+        with st.expander("🔐 Admin Access (Login to Edit)", expanded=False):
+            with st.form("admin_login"):
+                u = st.text_input("Username")
+                p = st.text_input("Password", type="password")
+                if st.form_submit_button("Login"):
+                    if u == SUPERUSER_USERNAME and p == SUPERUSER_PASSWORD:
+                        st.session_state.is_superuser = True
+                        st.success("Authenticated!")
+                        st.rerun()
+                    else:
+                        st.error("Invalid credentials")
+
     # 1. VIEW AN ORDER
     st.header("🔍 View Order Details")  
     search_id = st.text_input("Enter Order ID to view", placeholder="e.g. 123456789")
@@ -12,88 +34,141 @@ def delivery_management_page():
         if search_id:
             try:
                 orders = get_order_details(search_id) # Returns a list now
-                
-                # Global Header Info (from first item)
-                first = orders[0]
-                st.subheader(f"Order #{first.get('ORDER ID')} - {first.get('NAME')}")
-                
-                # Show items in a tidy table first
-                item_summary = []
-                for o in orders:
-                    item_summary.append({
-                        "SKU": o.get("SKU"),
-                        "PRODUCT": o.get("PRODUCT"),
-                        "QTY": o.get("QUANTITY"),
-                        "STATUS": o.get("STATUS")
-                    })
-                st.write("**📦 Order Items (SKUs)**")
-                st.dataframe(pd.DataFrame(item_summary), hide_index=True, use_container_width=True)
-
-                # Detailed Breakdown per item
-                for idx, order in enumerate(orders):
-                    sku_val = order.get('SKU')
-                    with st.expander(f"Details: {sku_val}", expanded=(idx == 0)):
-                        # Copy Button Area
-                        st.write("**SKU Code (Click icon to copy)**")
-                        st.code(sku_val, language=None)
-                        
-                        # Header with Status
-                        status = order.get('STATUS', 'UNKNOWN').upper()
-                        st.write(f"**Item Status:** {status}")
-                        if status == 'PAUSE':
-                            st.warning(f"Note: This item is PAUSED. {order.get('TS NOTES', '')}")
-                        
-                        # Row 1: Customer & Address
-                        c1, c2 = st.columns(2)
-                        with c1:
-                            st.write("**👤 Customer Info**")
-                            st.write(f"Name: {order.get('NAME')}")
-                            st.write(f"Email: {order.get('EMAIL')}")
-                            st.write(f"Phone: {order.get('  PHONE')}")
-                        with c2:
-                            st.write("**📍 Delivery Address**")
-                            st.write(f"{order.get('HOUSE UNIT NO')} {order.get('ADDRESS LINE 1')}")
-                            st.write(f"{order.get('CITY')}, {order.get('ZIP')}")
-
-                        # Row 2: Product Info
-                        st.write("---")
-                        p1, p2, p3 = st.columns([2,1,1])
-                        with p1:
-                            st.write("**📦 Product Details**")
-                            st.write(f"{order.get('PRODUCT')} ({order.get('PRODUCT CODE')})")
-                            st.caption(order.get('DESCRIPTION', ''))
-                        with p2:
-                            st.write("**🍽️ Plan**")
-                            st.write(f"Type: {order.get('MEAL TYPE')}")
-                            st.write(f"Plan: {order.get('MEAL PLAN')}")
-                        with p3:
-                            st.write("**🔢 Quantity**")
-                            st.write(f"Qty: {order.get('QUANTITY')}")
-                            st.write(f"Days: {order.get('DAYS')}")
-
-                        # Row 3: Timings & Notes
-                        st.write("---")
-                        t1, t2 = st.columns(2)
-                        with t1:
-                            st.write("**⏰ Delivery Timing**")
-                            st.write(f"Method: {order.get('DELIVERY')}")
-                            st.write(f"Time: {order.get('DELIVERY TIME')}")
-                            st.write(f"Upstair: {order.get('UPSTAIR DELIVERY')}")
-                        with t2:
-                            st.write("**📝 Delivery Notes**")
-                            st.info(order.get('DRIVER NOTE', 'No driver notes'))
-
-                        # Row 4: Skip History
-                        st.write("---")
-                        st.write("**⏭️ Skip History**")
-                        skips = [order.get(f"SKIP{i}") for i in range(1, 21) if order.get(f"SKIP{i}") not in ['0', '', None]]
-                        if skips:
-                            st.write(", ".join(skips))
-                        else:
-                            st.write("No skip dates recorded.")
-
+                st.session_state.delivery_search_results = orders
+                st.success(f"Found {len(orders)} record(s) for Order #{search_id}")
             except Exception as e:
                 st.error(f"Order not found or error: {e}")
+                st.session_state.pop("delivery_search_results", None)
+
+    if st.session_state.get("delivery_search_results"):
+        orders = st.session_state.delivery_search_results
+        
+        # Superuser Edit Mode
+        if is_superuser:
+            st.info("✏️ Edit Mode Enabled. Toggle changes and save to DB.")
+            df_display = sanitize_df(pd.DataFrame(orders))
+            
+            # Use data editor for admin
+            edited_df = st.data_editor(
+                df_display, 
+                use_container_width=True, 
+                hide_index=True, 
+                key="delivery_editor",
+                num_rows="fixed"
+            )
+            
+            if st.button("💾 Save Bulk Changes to DB"):
+                changes = st.session_state.get("delivery_editor")
+                if changes:
+                    edits = changes.get("edited_rows", {})
+                    success_count = 0
+                    
+                    try:
+                        for row_idx, new_values in edits.items():
+                            idx_label = int(row_idx)
+                            original_series = df_display.iloc[idx_label]
+                            
+                            oid = original_series.get("ORDER ID")
+                            original_row_dict = {
+                                k: str(v) if v is not None else "" 
+                                for k, v in original_series.to_dict().items()
+                            }
+                            
+                            if oid:
+                                update_master_row_api(oid, new_values, original_row_dict)
+                                success_count += 1
+                        
+                        if success_count > 0:
+                            st.success(f"Successfully updated {success_count} rows!")
+                            time.sleep(1)
+                            # Refresh data
+                            orders = get_order_details(search_id)
+                            st.session_state.delivery_search_results = orders
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"Save failed: {e}")
+                else:
+                    st.warning("No changes detected.")
+            st.divider()
+
+        # Global Header Info (from first item)
+        first = orders[0]
+        st.subheader(f"Order #{first.get('ORDER ID')} - {first.get('NAME')}")
+        
+        # Show items in a tidy table first
+        item_summary = []
+        for o in orders:
+            item_summary.append({
+                "SKU": o.get("SKU"),
+                "PRODUCT": o.get("PRODUCT"),
+                "QTY": o.get("QUANTITY"),
+                "STATUS": o.get("STATUS")
+            })
+        st.write("**📦 Order Items (SKUs)**")
+        st.dataframe(pd.DataFrame(item_summary), hide_index=True, use_container_width=True)
+
+        # Detailed Breakdown per item
+        for idx, order in enumerate(orders):
+            sku_val = order.get('SKU')
+            with st.expander(f"Details: {sku_val}", expanded=(idx == 0)):
+                # Copy Button Area
+                st.write("**SKU Code (Click icon to copy)**")
+                st.code(sku_val, language=None)
+                
+                # Header with Status
+                status = order.get('STATUS', 'UNKNOWN').upper()
+                st.write(f"**Item Status:** {status}")
+                if status == 'PAUSE':
+                    st.warning(f"Note: This item is PAUSED. {order.get('TS NOTES', '')}")
+                
+                # Row 1: Customer & Address
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.write("**👤 Customer Info**")
+                    st.write(f"Name: {order.get('NAME')}")
+                    st.write(f"Email: {order.get('EMAIL')}")
+                    st.write(f"Phone: {order.get('  PHONE')}")
+                with c2:
+                    st.write("**📍 Delivery Address**")
+                    st.write(f"{order.get('HOUSE UNIT NO')} {order.get('ADDRESS LINE 1')}")
+                    st.write(f"{order.get('CITY')}, {order.get('ZIP')}")
+
+                # Row 2: Product Info
+                st.write("---")
+                p1, p2, p3 = st.columns([2,1,1])
+                with p1:
+                    st.write("**📦 Product Details**")
+                    st.write(f"{order.get('PRODUCT')} ({order.get('PRODUCT CODE')})")
+                    st.caption(order.get('DESCRIPTION', ''))
+                with p2:
+                    st.write("**🍽️ Plan**")
+                    st.write(f"Type: {order.get('MEAL TYPE')}")
+                    st.write(f"Plan: {order.get('MEAL PLAN')}")
+                with p3:
+                    st.write("**🔢 Quantity**")
+                    st.write(f"Qty: {order.get('QUANTITY')}")
+                    st.write(f"Days: {order.get('DAYS')}")
+
+                # Row 3: Timings & Notes
+                st.write("---")
+                t1, t2 = st.columns(2)
+                with t1:
+                    st.write("**⏰ Delivery Timing**")
+                    st.write(f"Method: {order.get('DELIVERY')}")
+                    st.write(f"Time: {order.get('DELIVERY TIME')}")
+                    st.write(f"Upstair: {order.get('UPSTAIR DELIVERY')}")
+                with t2:
+                    st.write("**📝 Delivery Notes**")
+                    st.info(order.get('DRIVER NOTE', 'No driver notes'))
+
+                # Row 4: Skip History
+                st.write("---")
+                st.write("**⏭️ Skip History**")
+                skips = [order.get(f"SKIP{i}") for i in range(1, 21) if order.get(f"SKIP{i}") not in ['0', '', None]]
+                if skips:
+                    st.write(", ".join(skips))
+                else:
+                    st.write("No skip dates recorded.")
 
     st.divider()
 

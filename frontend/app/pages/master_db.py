@@ -10,7 +10,7 @@ SUPERUSER_USERNAME = os.getenv("SUPERUSER_USERNAME", "admin")
 SUPERUSER_PASSWORD = os.getenv("SUPERUSER_PASSWORD", "admin")
 
 def master_database_page():
-    st.title("🗄️ Master Database Dictionary")
+    st.title("🗄️ Master Database")
     
     # 1. Superuser Authentication
     is_superuser = st.session_state.get("is_superuser", False)
@@ -29,9 +29,16 @@ def master_database_page():
                         st.error("Invalid credentials")
 
     # 2. Main Database View
+    only_active = st.toggle(
+        "📝 Show Active Orders Only",
+        value=True,
+        help="Active includes WIP, PAUSE, TBS, LAST DAY. Turn off to see full historical database."
+    )
+
     if st.button("🔄 Refresh Data"):
         try:
-            resp = requests.get(f"{BACKEND_URL}/master-data")
+            params = {"only_active": "true" if only_active else "false"}
+            resp = requests.get(f"{BACKEND_URL}/master-data", params=params)
             resp.raise_for_status()
             st.session_state.db_master = sanitize_df(pd.DataFrame(resp.json()))
         except Exception as e:

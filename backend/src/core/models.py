@@ -6,7 +6,7 @@ from typing import Optional, Dict, List
 from enum import Enum
 
 
-class OrderStatus(str, Enum):
+class ActiveOrderStatuses(str, Enum):
     WIP = "WIP"
     PAUSE = "PAUSE"
     TBS = "TBS"

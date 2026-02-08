@@ -55,7 +55,7 @@ def seller_data_page():
                     
                 data = df_clean.to_dict(orient="records")
                 
-                res = upload_master_data_api(data)
+                res = upload_master_data_api(data, table_name="seller-data")
                 inserted = res.get('inserted', 0)
                 updated = res.get('updated', 0)
                 skipped = res.get('skipped', 0)
