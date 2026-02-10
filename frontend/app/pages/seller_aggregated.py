@@ -16,14 +16,50 @@ def seller_data_page():
     
     if st.button("🔄 Fetch Aggregated Data"):
         try:
-            with st.spinner("Iterating through all seller sheets (this may take 30s+)..."):
-                resp = requests.get(f"{BACKEND_URL}/fetch-aggregated-seller-data")
-                if resp.status_code != 200:
-                    st.error(f"Failed to fetch: {resp.text}")
+            with st.status("🚀 Aggregating Seller Data...", expanded=True) as status:
+                # 1. Get the list of sheet URLs
+                status.write("Obtaining seller sheet URLs...")
+                sheet_ids = requests.get(f"{BACKEND_URL}/seller-sheet-urls")
+                sheet_ids.raise_for_status()
+                sheet_ids = sheet_ids.json()
+                total_sheets = len(sheet_ids)
+                
+                all_raw_rows = []
+                
+                # 2. Extract IDs and Prepare Progress
+                progress_bar = st.progress(0)
+                
+                # 3. Iterate through sheets and show progress
+                for i, sid in enumerate(sheet_ids):
+                    status.update(label=f"🔄 Processing sheet {i+1} of {total_sheets}...", state="running")
+                    try:
+                        # We call the single-sheet worker
+                        r = requests.get(f"{BACKEND_URL}/fetch-single-seller-ongoing", params={"sid": sid})
+                        if r.status_code == 200:
+                            rows = r.json()
+                            all_raw_rows.extend(rows)
+                    except Exception as sheet_e:
+                        status.write(f"⚠️ Warning: Failed to fetch sheet {i+1}: {sheet_e}")
+                    
+                    progress_bar.progress((i + 1) / total_sheets)
+
+                status.update(label="✨ Finalizing and formatting data...", state="running")
+                
+                # 4. Finalize with numbering and transformations
+                if all_raw_rows:
+                    resp_final = requests.post(f"{BACKEND_URL}/finalize-seller-data", json=all_raw_rows)
+                    resp_final.raise_for_status()
+                    final_data = resp_final.json()
+                    
+                    st.session_state.seller_sheet_data = pd.DataFrame(final_data)
+                    status.update(label=f"✅ Successfully aggregated {len(final_data)} records!", state="complete")
+                    st.success(f"Aggregation complete! Found {len(final_data)} total records across {total_sheets} sheets.")
                 else:
-                    data = resp.json()
-                    st.session_state.seller_sheet_data = pd.DataFrame(data)
-                    st.success(f"Successfully aggregated {len(data)} records!")
+                    status.update(label="⚠️ No 'Ongoing' records found.", state="complete")
+                    st.warning("No 'Ongoing' records were found in any of the processed sheets.")
+                    
+                progress_bar.empty()
+
         except Exception as e:
             st.error(f"Error fetching data: {e}")
 
