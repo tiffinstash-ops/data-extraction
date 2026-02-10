@@ -12,5 +12,5 @@ pytz
 phonenumbers==9.0.22
 googlemaps
 gspread
-googleapiclient
+google-api-python-client
 tenacity
