@@ -3,6 +3,9 @@ import pandas as pd
 import os
 import numpy as np
 import streamlit as st
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Configuration
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
