@@ -5,3 +5,5 @@ requests>=2.31.0
 openpyxl>=3.1.0
 python-dotenv
 pytz
+google-auth-oauthlib>=1.0.0
+google-api-python-client>=2.100.0

@@ -56,7 +56,8 @@ def load_sellers_api():
         resp = requests.get(f"{BACKEND_URL}/sellers", auth=get_auth())
         resp.raise_for_status()
         return pd.DataFrame(resp.json())
-    except Exception:
+    except Exception as e:
+        logger.error(f"Failed to load sellers: {e}")
         return pd.DataFrame(columns=['SELLER CODE', 'SELLER NAME', 'WEB_ADDRESS_EXTENSION'])
 
 def get_order_details(order_id):

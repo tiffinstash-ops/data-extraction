@@ -22,14 +22,26 @@ Located in `/frontend`.
 Provides the user interface for fetching orders, viewing statistics, and managing deliveries.
 
 ### Features:
-- Dashboard for order fetching and processing.
-- Delivery Management dashboard with a form to update SKU fields and TL Notes.
-- Dynamic Seller Dashboards.
+- **Google SSO Authentication**: Secure login with @tiffinstash.com Google accounts
+- Dashboard for order fetching and processing
+- Delivery Management dashboard with a form to update SKU fields and TL Notes
+- Dynamic Seller Dashboards
+- User profile display with secure session management
+
+### Authentication:
+- **Primary**: Google OAuth 2.0 SSO (domain-restricted to @tiffinstash.com)
+- **Fallback**: Traditional username/password authentication
+- See `/docs/QUICKSTART_SSO.md` for setup instructions
 
 ### Deployment:
 - Dockerfile: `/frontend/Dockerfile`
 - Port: 8501
-- Environment Variables: `BACKEND_URL` (default: http://localhost:8000)
+- Environment Variables: 
+  - `BACKEND_URL` (default: http://localhost:8000)
+  - `GOOGLE_OAUTH_CLIENT_ID` (for SSO)
+  - `GOOGLE_OAUTH_CLIENT_SECRET` (for SSO)
+  - `GOOGLE_OAUTH_REDIRECT_URI` (for SSO)
+  - `ALLOWED_SSO_DOMAIN` (default: tiffinstash.com)
 
 ## Getting Started
 
