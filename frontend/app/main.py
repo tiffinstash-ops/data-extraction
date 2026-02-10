@@ -9,6 +9,7 @@ from pages.delivery import delivery_management_page
 from pages.seller_aggregated import seller_data_page
 from pages.master_db import master_database_page
 from pages.seller_dashboard import seller_page
+from pages.instructions import instructions_page
 from utils.api import load_sellers_api
 
 # Wide layout so tables use full width (must be first Streamlit command)
@@ -70,6 +71,7 @@ def main():
     
     # Static Pages
     pages = [
+        st.Page(instructions_page, title="How to Use Dashboard", icon="📘"),
         st.Page(dashboard_page, title="Shopify Dashboard", icon="🛍️"),
         st.Page(delivery_management_page, title="Order Management", icon="🚚"),
         st.Page(seller_data_page, title="Seller Data", icon="📑"),
