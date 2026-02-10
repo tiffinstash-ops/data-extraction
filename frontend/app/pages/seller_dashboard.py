@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import os
-from utils.api import final_pivot_df, sanitize_df
+from utils.api import final_pivot_df, sanitize_df, get_auth
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
@@ -14,7 +14,7 @@ def seller_page(seller_name, seller_code):
     if st.button("🔄 Sync Seller Data", key=f"btn_{seller_code}"):
         try:
             with st.spinner(f"Fetching data for {seller_name}..."):
-                resp = requests.get(f"{BACKEND_URL}/master-data")
+                resp = requests.get(f"{BACKEND_URL}/master-data", auth=get_auth())
                 resp.raise_for_status()
                 df = sanitize_df(pd.DataFrame(resp.json()))
                 # Filter

@@ -13,7 +13,7 @@ from pages.instructions import instructions_page
 from utils.api import load_sellers_api
 
 # Wide layout so tables use full width (must be first Streamlit command)
-st.set_page_config(layout="wide", page_title="Data Extraction")
+st.set_page_config(layout="wide", page_title="Tiffinstash Operations")
 
 # Custom CSS: wider layout + table cell wrapping
 st.markdown("""
@@ -62,10 +62,57 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# Admin Credentials
+SUPERUSER_USERNAME = os.getenv("SUPERUSER_USERNAME", "admin")
+SUPERUSER_PASSWORD = os.getenv("SUPERUSER_PASSWORD", "admin")
+
+def show_login_page():
+    """Display the login form."""
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 1, 1])
+    
+    with col2:
+        st.markdown("### 🔐 Tiffinstash Operations")
+        st.markdown("Please log in to access the dashboard")
+        
+        with st.form("login_form"):
+            username = st.text_input("Username", placeholder="Enter your username")
+            password = st.text_input("Password", type="password", placeholder="Enter your password")
+            submit = st.form_submit_button("Login", use_container_width=True)
+            
+            if submit:
+                if username == SUPERUSER_USERNAME and password == SUPERUSER_PASSWORD:
+                    st.session_state.authenticated = True
+                    # Store credentials for API calls
+                    st.session_state.auth_username = username
+                    st.session_state.auth_password = password
+                    st.success("Login successful! Redirecting...")
+                    st.rerun()
+                else:
+                    st.error("Invalid username or password")
+
 def main():
-    # Initialize some states
+    # Initialize authentication state
+    if 'authenticated' not in st.session_state:
+        st.session_state.authenticated = False
+    
+    # Check if user is authenticated
+    if not st.session_state.authenticated:
+        show_login_page()
+        return
+    
+    # Initialize other states
     if 'master_data' not in st.session_state: st.session_state.master_data = None
     if 'db_master' not in st.session_state: st.session_state.db_master = None
+
+    # Add logout button in sidebar
+    with st.sidebar:
+        st.markdown("---")
+        if st.button("🚪 Logout", use_container_width=True):
+            st.session_state.authenticated = False
+            st.session_state.is_superuser = False
+            st.rerun()
 
     sellers_df = load_sellers_api()
     

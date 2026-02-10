@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import os
-from utils.api import upload_master_data_api
+from utils.api import upload_master_data_api, get_auth
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
@@ -19,7 +19,7 @@ def seller_data_page():
             with st.status("🚀 Aggregating Seller Data...", expanded=True) as status:
                 # 1. Get the list of sheet URLs
                 status.write("Obtaining seller sheet URLs...")
-                sheet_ids = requests.get(f"{BACKEND_URL}/seller-sheet-urls")
+                sheet_ids = requests.get(f"{BACKEND_URL}/seller-sheet-urls", auth=get_auth())
                 sheet_ids.raise_for_status()
                 sheet_ids = sheet_ids.json()
                 total_sheets = len(sheet_ids)
@@ -34,7 +34,7 @@ def seller_data_page():
                     status.update(label=f"🔄 Processing sheet {i+1} of {total_sheets}...", state="running")
                     try:
                         # We call the single-sheet worker
-                        r = requests.get(f"{BACKEND_URL}/fetch-single-seller-ongoing", params={"sid": sid})
+                        r = requests.get(f"{BACKEND_URL}/fetch-single-seller-ongoing", params={"sid": sid}, auth=get_auth())
                         if r.status_code == 200:
                             rows = r.json()
                             all_raw_rows.extend(rows)
@@ -47,7 +47,7 @@ def seller_data_page():
                 
                 # 4. Finalize with numbering and transformations
                 if all_raw_rows:
-                    resp_final = requests.post(f"{BACKEND_URL}/finalize-seller-data", json=all_raw_rows)
+                    resp_final = requests.post(f"{BACKEND_URL}/finalize-seller-data", json=all_raw_rows, auth=get_auth())
                     resp_final.raise_for_status()
                     final_data = resp_final.json()
                     

@@ -1,5 +1,5 @@
 import streamlit as st
-from utils.api import update_master_row_api, delete_master_row_api, sanitize_df
+from utils.api import update_master_row_api, delete_master_row_api, sanitize_df, get_auth
 import requests
 import pandas as pd
 import os
@@ -42,7 +42,7 @@ def master_database_page():
         if st.button("🔄 Refresh Master View"):
             try:
                 params = {"only_active": "true" if only_active else "false"}
-                resp = requests.get(f"{BACKEND_URL}/master-data", params=params)
+                resp = requests.get(f"{BACKEND_URL}/master-data", params=params, auth=get_auth())
                 resp.raise_for_status()
                 st.session_state.db_master = sanitize_df(pd.DataFrame(resp.json()))
             except Exception as e:
@@ -105,7 +105,7 @@ def master_database_page():
             st.info("Please load 'Refresh Master View' in the first tab to search here, or click below.")
             if st.button("Load Data for Deletion"):
                 try:
-                    resp = requests.get(f"{BACKEND_URL}/master-data", params={"only_active": "false"})
+                    resp = requests.get(f"{BACKEND_URL}/master-data", params={"only_active": "false"}, auth=get_auth())
                     resp.raise_for_status()
                     st.session_state.db_master = sanitize_df(pd.DataFrame(resp.json()))
                     st.rerun()
