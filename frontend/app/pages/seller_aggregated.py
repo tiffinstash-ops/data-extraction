@@ -3,6 +3,9 @@ import requests
 import pandas as pd
 import os
 from utils.api import upload_master_data_api, get_auth
+import logging
+
+logger = logging.getLogger(__name__)
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 

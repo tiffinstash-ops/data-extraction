@@ -154,15 +154,24 @@ def upload_master_data(request: MasterUploadRequest):
                     return re.sub(r'[^a-zA-Z0-9_]', '_', k.strip())
 
 
-                # Normalize DATE to YYYY-MM-DD if it's in DD-MMM format (PostgreSQL rejects "30-Jan")
+                # Normalize DATE to YYYY-MM-DD (PostgreSQL rejects "30-Jan")
                 date_val = valid_row.get("DATE")
                 if date_val and isinstance(date_val, str):
                     try:
-                        # Try parsing DD-MMM or D-MMM (e.g. "30-Jan", "5-Feb")
-                        parsed = datetime.strptime(date_val.strip(), "%d-%b")
-                        valid_row["DATE"] = parsed.strftime("%Y-%m-%d")
-                    except ValueError:
-                        pass  # Leave as-is if not DD-MMM format
+                        val_strip = date_val.strip()
+                        # If matches "31-Jan", "5-Feb", etc.
+                        if re.match(r'^\d{1,2}-[A-Za-z]{3}$', val_strip):
+                            current_year = datetime.now().year
+                            parsed = datetime.strptime(f"{val_strip}-{current_year}", "%d-%b-%Y")
+                            valid_row["DATE"] = parsed.strftime("%Y-%m-%d")
+                        else:
+                            # Try general parsing if it's not DD-MMM
+                            # (This handles YYYY-MM-DD or other standard formats if they were strings)
+                            pd_date = pd.to_datetime(val_strip, errors='coerce')
+                            if pd.notnull(pd_date):
+                                valid_row["DATE"] = pd_date.strftime("%Y-%m-%d")
+                    except Exception:
+                        pass  # Leave as-is if parsing fails
 
                 # Convert empty strings to None to avoid invalid integer '' errors
                 params = {
