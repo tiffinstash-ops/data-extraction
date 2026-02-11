@@ -158,6 +158,13 @@ def handle_oauth_callback():
         state = query_params.get('state')
         session_state = st.session_state.get('oauth_state')
         
+        # Verify state matches (CSRF protection)
+        state_matches = (state and session_state == state)
+        
+        # Check if we are on localhost to allow a bypass if session is lost
+        from utils.google_oauth import REDIRECT_URI
+        is_local = "localhost" in REDIRECT_URI or "127.0.0.1" in REDIRECT_URI
+        
         # Determine if we should allow the exchange
         # 1. State matches exactly (Normal flow)
         # 2. Local development bypass

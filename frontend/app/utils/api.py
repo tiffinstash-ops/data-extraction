@@ -5,6 +5,8 @@ import numpy as np
 import streamlit as st
 import logging
 
+# Initialize logger
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Configuration
