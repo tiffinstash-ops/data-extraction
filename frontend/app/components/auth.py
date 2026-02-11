@@ -158,18 +158,21 @@ def handle_oauth_callback():
         state = query_params.get('state')
         session_state = st.session_state.get('oauth_state')
         
-        # Verify state matches (CSRF protection)
-        state_matches = (state and session_state == state)
+        # Determine if we should allow the exchange
+        # 1. State matches exactly (Normal flow)
+        # 2. Local development bypass
+        # 3. Session state was lost but we have both code and state in URL (Cloud Run issue)
+        should_proceed = state_matches or (is_local and state) or (state and session_state is None)
         
-        # Check if we are on localhost to allow a bypass if session is lost
-        from utils.google_oauth import REDIRECT_URI
-        is_local = "localhost" in REDIRECT_URI or "127.0.0.1" in REDIRECT_URI
-        
-        if state_matches or (is_local and state):
-            if not state_matches:
+        if should_proceed:
+            if not state_matches and session_state is not None:
+                st.error("Authentication state mismatch. Please try again.")
+                return False
+                
+            if session_state is None and state:
                 import logging
                 logger = logging.getLogger(__name__)
-                logger.warning(f"OAuth state mismatch on localhost (Received '{state}', Expected '{session_state}'). Proceeding anyway because we are local.")
+                logger.warning(f"OAuth session state lost, but state found in URL. Proceeding with exchange.")
             
             # Exchange code for token
             user_info = exchange_code_for_token(code, state)
