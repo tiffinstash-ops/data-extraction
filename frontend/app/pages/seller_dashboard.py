@@ -14,14 +14,41 @@ def seller_page(seller_name, seller_code):
     if st.button("🔄 Sync Seller Data", key=f"btn_{seller_code}"):
         try:
             with st.spinner(f"Fetching data for {seller_name}..."):
-                resp = requests.get(f"{BACKEND_URL}/master-data", auth=get_auth())
-                resp.raise_for_status()
-                df = sanitize_df(pd.DataFrame(resp.json()))
-                # Filter
+                # 1. Fetch from historical-data (Shopify Master)
+                resp_h = requests.get(
+                    f"{BACKEND_URL}/master-data", 
+                    params={"table_name": "historical-data", "only_active": "true"}, 
+                    auth=get_auth()
+                )
+                data_h = resp_h.json() if resp_h.status_code == 200 else []
+                
+                # 2. Fetch from seller-data (Manual Aggregations)
+                # Note: seller-data might not have 'STATUS' column, so only_active=false
+                resp_s = requests.get(
+                    f"{BACKEND_URL}/master-data", 
+                    params={"table_name": "seller-data", "only_active": "false"}, 
+                    auth=get_auth()
+                )
+                data_s = resp_s.json() if resp_s.status_code == 200 else []
+                
+                # Combine results
+                df_h = pd.DataFrame(data_h)
+                df_s = pd.DataFrame(data_s)
+
+                df_combined = pd.concat([df_h, df_s], ignore_index=True)
+                
+                df = sanitize_df(df_combined)
+                
+                df["DESCRIPTION"] = df["DESCRIPTION"].fillna("YOUR CUSTOMER").replace("", "YOUR CUSTOMER")
+
+
+                # Filter for this seller
                 if 'SELLER' in df.columns:
-                    st.session_state[f"seller_{seller_code}"] = df[df['SELLER'].astype(str) == str(seller_code)]
+                    # Clean the SELLER column to ensure match works
+                    df['SELLER'] = df['SELLER'].astype(str).str.strip()
+                    st.session_state[f"seller_{seller_code}"] = df[df['SELLER'] == str(seller_code)]
                 else:
-                    st.error("SELLER column missing in database!")
+                    st.error("SELLER column missing in database tables!")
         except Exception as e:
             st.error(f"Error: {e}")
     data_key = f"seller_{seller_code}"
