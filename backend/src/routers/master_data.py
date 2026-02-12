@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from typing import List, Dict
 import pandas as pd
 import numpy as np
@@ -42,6 +42,48 @@ def get_all_master_data(table_name: str = "historical-data", only_active: bool =
 
             return df.to_dict(orient="records")
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        connector.close()
+@router.get("/check-duplicate-ids")
+def check_duplicate_ids(table_name: str = "historical-data", order_ids: List[str] = Query(None)):
+    if not order_ids:
+        return {"existing_ids": []}
+    
+    # Normalize input IDs: trim and remove '#' for broad matching
+    normalized_input = [str(oid).strip().replace("#", "") for oid in order_ids if oid]
+    if not normalized_input:
+        return {"existing_ids": []}
+
+    engine, connector = get_db_engine()
+    try:
+        with engine.connect() as conn:
+            # We compare the input IDs against the DB IDs by removing '#' and trimming both sides
+            # This handles cases like "#30233" matching "30233"
+            ids_placeholder = ", ".join([f":id{i}" for i in range(len(normalized_input))])
+            params = {f"id{i}": oid for i, oid in enumerate(normalized_input)}
+            
+            # Query the table normalizing the ORDER ID column for the comparison
+            # But we want to return the ORIGINAL IDs that were passed in if they matched
+            query_sql = f"""
+                SELECT "ORDER ID" 
+                FROM "{table_name}" 
+                WHERE TRIM(REPLACE("ORDER ID", '#', '')) IN ({ids_placeholder})
+            """
+            result = conn.execute(text(query_sql), params).fetchall()
+            
+            # Now we need to map back which search IDs were found.
+            # We'll return a list of the input IDs that matched.
+            db_normalized_found = {str(r[0]).strip().replace("#", "") for r in result}
+            
+            found_original_ids = []
+            for original_id in order_ids:
+                if str(original_id).strip().replace("#", "") in db_normalized_found:
+                    found_original_ids.append(original_id)
+
+            return {"existing_ids": found_original_ids}
+    except Exception as e:
+        logger.error(f"Error checking duplicate IDs: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         connector.close()

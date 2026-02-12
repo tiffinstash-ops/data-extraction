@@ -12,9 +12,56 @@ from utils.google_oauth import (
     ALLOWED_DOMAIN
 )
 
+import json
+import time
+
 # Admin Credentials (fallback for local development)
 SUPERUSER_USERNAME = os.getenv("SUPERUSER_USERNAME", "admin")
 SUPERUSER_PASSWORD = os.getenv("SUPERUSER_PASSWORD", "admin")
+
+# Session cache file path
+SESSION_CACHE_FILE = ".auth_session.json"
+SESSION_DURATION = 5 * 60 * 60  # 5 hours in seconds
+
+def save_auth_session(user_info):
+    """Save authentication session to a local file."""
+    data = {
+        "user_info": user_info,
+        "expiry": time.time() + SESSION_DURATION
+    }
+    try:
+        with open(SESSION_CACHE_FILE, "w") as f:
+            json.dump(data, f)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Failed to save auth session: {e}")
+
+def load_auth_session():
+    """Load authentication session from a local file if valid."""
+    if not os.path.exists(SESSION_CACHE_FILE):
+        return None
+    
+    try:
+        with open(SESSION_CACHE_FILE, "r") as f:
+            data = json.load(f)
+            
+        if time.time() < data.get("expiry", 0):
+            return data.get("user_info")
+        else:
+            # Session expired
+            os.remove(SESSION_CACHE_FILE)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Failed to load auth session: {e}")
+        if os.path.exists(SESSION_CACHE_FILE):
+            os.remove(SESSION_CACHE_FILE)
+            
+    return None
+
+def clear_auth_session():
+    """Remove the auth session file."""
+    if os.path.exists(SESSION_CACHE_FILE):
+        os.remove(SESSION_CACHE_FILE)
 
 
 def show_google_login_button():
@@ -101,6 +148,10 @@ def show_traditional_login_form():
                 # Store credentials for API calls
                 st.session_state.auth_username = username
                 st.session_state.auth_password = password
+                
+                # Save session to file
+                save_auth_session(st.session_state.user_info)
+                
                 st.success("Login successful! Redirecting...")
                 st.rerun()
             else:
@@ -194,6 +245,9 @@ def handle_oauth_callback():
                 st.session_state.auth_username = SUPERUSER_USERNAME
                 st.session_state.auth_password = SUPERUSER_PASSWORD
                 
+                # Save session for persistence
+                save_auth_session(user_info)
+                
                 # Clear query parameters
                 st.query_params.clear()
                 
@@ -228,6 +282,10 @@ def handle_oauth_callback():
                     st.session_state.authenticated = True
                     st.session_state.auth_username = SUPERUSER_USERNAME
                     st.session_state.auth_password = SUPERUSER_PASSWORD
+                    
+                    # Save session
+                    save_auth_session(user_info)
+                    
                     st.query_params.clear()
                     st.success(f"Welcome, {user_info['name']}!")
                     st.rerun()
@@ -269,4 +327,8 @@ def show_user_info_sidebar():
                 # Clear all session state
                 for key in list(st.session_state.keys()):
                     del st.session_state[key]
+                
+                # Clear persistent cache
+                clear_auth_session()
+                
                 st.rerun()

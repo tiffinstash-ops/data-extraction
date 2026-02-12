@@ -3,3 +3,4 @@
 /venv
 **/__pycache__/
 **/token_cache.json
+**/.auth_session.json

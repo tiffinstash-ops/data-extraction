@@ -8,7 +8,8 @@ from utils.api import (
     update_master_row_api, 
     sanitize_df,
     search_shopify_orders_api,
-    upload_master_data_api
+    upload_master_data_api,
+    check_existing_ids_api
 )
 
 # Admin Credentials
@@ -158,7 +159,25 @@ def delivery_management_page():
                     st.error(f"Shopify search failed: {e}")
 
         if st.session_state.get("shopify_master_results") is not None:
-            sm_df = st.session_state.shopify_master_results
+            sm_df = st.session_state.shopify_master_results.copy()
+            
+            # Check for existing orders
+            try:
+                unique_ids = sm_df["ORDER ID"].unique().tolist()
+                existing_ids = set(check_existing_ids_api(unique_ids))
+                
+                if existing_ids:
+                    st.warning("⚠️ Some orders have been saved in master Database")
+                
+                def mark_existing(oid):
+                    str_oid = str(oid)
+                    if str_oid in existing_ids:
+                        return f"{str_oid} ✅ (On DB)"
+                    return str_oid
+                sm_df["ORDER ID"] = sm_df["ORDER ID"].apply(mark_existing)
+            except Exception as e:
+                st.warning(f"Could not check existing orders: {e}")
+
             st.write("### Processed Results (Preview & Edit)")
             st.info("✏️ You can edit the values below before syncing to the database.")
             

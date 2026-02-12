@@ -17,7 +17,14 @@ from pages.instructions import instructions_page
 from utils.api import load_sellers_api
 
 # Import authentication components
-from components.auth import show_login_page, handle_oauth_callback, show_user_info_sidebar
+from components.auth import (
+    show_login_page, 
+    handle_oauth_callback, 
+    show_user_info_sidebar,
+    load_auth_session,
+    SUPERUSER_USERNAME,
+    SUPERUSER_PASSWORD
+)
 
 # Wide layout so tables use full width (must be first Streamlit command)
 st.set_page_config(layout="wide", page_title="Tiffinstash Operations")
@@ -73,6 +80,15 @@ def main():
     # Initialize authentication state
     if 'authenticated' not in st.session_state:
         st.session_state.authenticated = False
+    
+    # Check for persistent session if not already authenticated in current session
+    if not st.session_state.authenticated:
+        cached_user = load_auth_session()
+        if cached_user:
+            st.session_state.user_info = cached_user
+            st.session_state.authenticated = True
+            st.session_state.auth_username = SUPERUSER_USERNAME
+            st.session_state.auth_password = SUPERUSER_PASSWORD
     
     # Handle OAuth callback (if redirected from Google)
     if not st.session_state.authenticated:

@@ -37,6 +37,13 @@ def clean_dict(d):
         else:
             new_d[k] = str(v)
     return new_d
+def check_existing_ids_api(order_ids, table_name="historical-data"):
+    if not order_ids:
+        return []
+    params = {"table_name": table_name, "order_ids": order_ids}
+    resp = requests.get(f"{BACKEND_URL}/check-duplicate-ids", params=params, auth=get_auth())
+    resp.raise_for_status()
+    return resp.json().get("existing_ids", [])
 
 def fetch_orders_from_api(start_date, end_date):
     params = {"start_date": start_date, "end_date": end_date}

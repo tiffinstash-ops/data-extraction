@@ -1,12 +1,18 @@
 import streamlit as st
 from datetime import datetime, timedelta
+import requests
+import os
 from utils.api import (
     fetch_orders_from_api,
     process_transformations_api,
     upload_master_data_api,
-    sanitize_df
+    sanitize_df,
+    get_auth,
+    check_existing_ids_api
 )
 import pandas as pd
+
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
 def dashboard_page():
     st.title("🛍️ Daily Orders Data")
@@ -32,15 +38,36 @@ def dashboard_page():
 
     if st.session_state.get("master_data") is not None:
         st.header("Shopify Data Preview")
-        
+
         # Simple search
         search = st.text_input("Filter database view")
+        
+        df_display = st.session_state.master_data.copy()
+        
+        if "ORDER ID" in df_display.columns:
+            try:
+                unique_ids = df_display["ORDER ID"].unique().tolist()
+                existing_ids = set(check_existing_ids_api(unique_ids))
+                
+                if existing_ids:
+                    st.warning("⚠️ Some orders have alrready been saved in Master Database")
+                
+                def mark_existing(oid):
+                    str_oid = str(oid)
+                    if str_oid in existing_ids:
+                        return f"{str_oid} ✅ (On DB)"
+                    return str_oid
+                
+                df_display["ORDER ID"] = df_display["ORDER ID"].apply(mark_existing)
+            except Exception as e:
+                st.warning(f"Could not check existing orders: {e}")
+
         if search:
-            mask = st.session_state.master_data.astype(str).apply(lambda x: x.str.contains(search, case=False, na=False)).any(axis=1)
-            st.session_state.master_data = st.session_state.master_data[mask]
+            mask = df_display.astype(str).apply(lambda x: x.str.contains(search, case=False, na=False)).any(axis=1)
+            df_display = df_display[mask]
 
         st.dataframe(
-            st.session_state.master_data, use_container_width=True, hide_index=True
+            df_display, use_container_width=True, hide_index=True
         )
 
         c1, c2 = st.columns(2)

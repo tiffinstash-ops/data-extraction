@@ -8,89 +8,79 @@ def instructions_page():
     
     st.markdown("""
     ### 🔐 **Admin Login**
-    Some pages require admin access to edit/delete records.
-    - Look for **"🔐 Admin Access"** and enter your credentials
-    - Pages needing login: **Order Management**, **Master Database**
+    Most editing and management tasks now require admin authentication.
+    - **Global Login:** You are prompted to log in when first opening the app via Google OAuth or credentials.
+    - **Edit Mode:** In pages like **Order Management** or **Master Database**, look for the **"🔐 Admin Access"** expander if you need to unlock editing/deletion capabilities.
+    - **Credentials:** Use the standard superuser credentials provided to the ops team.
     
     ---
     
     ### 🛍️ **1. Shopify Dashboard**
     Pull orders from Shopify and prepare them for the system.
     
-    **What You Can Do:**
-    1. **Pick Date Range** → Choose start and end dates
-    2. **Click "🔍 Fetch & Process Orders"** → Gets orders from Shopify
-    3. **Search the table** → Filter by name, ID, city, etc.
-    4. **Download CSV** → Save data to your computer
-    5. **Upload to Database** → Save processed orders
+    **New Key Features:**
+    - **🔍 Automatic DB Check:** When you fetch orders, the dashboard automatically checks if they already exist in the SQL Master Database.
+    - **✅ Status Markers:** Existing orders are marked as **`{Order ID} ✅ (On DB)`** in the preview table.
+    - **⚠️ Duplicate Warning:** A warning header **"⚠️ Some orders have already been saved in Master Database"** will appear if matches are found.
+    - **Normalized Matching:** The system is smart! It matches IDs even if they have '#' prefixes or extra spaces (e.g., `#30233` matches `30233`).
+    
+    **Standard Workflow:**
+    1. **Pick Date Range** → Choose start and end dates.
+    2. **Click "🔍 Fetch & Process Orders"** → Pulls fresh data from Shopify.
+    3. **Review & Search** → Use the search bar to filter by name, ID, or city.
+    4. **Upload to Database** → Saves records. The system will automatically **update** existing records or **skip** them if they are identical.
     
     ---
     
     ### 🚚 **2. Order Management**
-    Search and edit individual orders.
+    Search and edit individual orders or search Shopify live.
     
     **Tab 1: Database Management**
-    - **Search by Order ID** → Find existing orders
-    - **Edit Order Details** (admin only):
-        - Customer info, address, product details
-        - Change status: WIP, PAUSE, TBS, LAST DAY, CANCELLED, DELIVERED
-        - Update delivery times and notes
-    - **Manage Skip Slots** → Edit SKIP1-SKIP20 for meal plan pauses
+    - **Search by Order ID** → Find records already in our SQL database.
+    - **Detailed Edit (Admin Only):** Click a record to expand and edit customer info, address, status (WIP, PAUSE, TBS, LAST DAY, CANCELLED, DELIVERED), and TS/Driver notes.
+    - **Manage Skip Slots:** Scroll down to find the **"⏭️ Skip Slots Management"** section to manage specific meal plan pause dates (SKIP1-20).
     
     **Tab 2: Shopify Integration**
-    - **Search Shopify Live** → Find orders directly from Shopify
-    - **Edit Before Upload** → Modify any details in the table
-    - **Upload to Database** → Save new orders to the system
+    - **Live Search:** Search Shopify directly (name, email, address) without fetching a whole date range.
+    - **Instant DB Verification:** Just like the main dashboard, live search results will immediately show if a record is already **(On DB)**.
     
     ---
     
     ### 📑 **3. Seller Data (Aggregated)**
-    Collect all "Ongoing" orders from seller sheets in one click.
+    Collect "Ongoing" orders from external Google Sheets in bulk.
     
     **Steps:**
-    1. **Click "🔄 Fetch Aggregated Data"**
-        - Progress bar shows which sheet is being processed
-        - Pulls only "Ongoing" orders from SD DATA tabs
-    2. **Review the table** → Check if data looks correct
-    3. **Search to filter** → Find specific sellers or meals
-    4. **Click "🚀 Upload to Database"** → Save all records
-    
-    > ✅ Automatically skips duplicates, safe to run multiple times daily
+    1. **Click "🔄 Fetch Aggregated Data"** → The system iterates through 40+ seller sheets.
+    2. **Automatic Filtering:** Only rows marked "Ongoing" in the "SD DATA" tabs are collected.
+    3. **Upload to Database:** Saves everything to the `seller-data` table. It automatically skips duplicates based on the row fingerprint.
     
     ---
     
     ### 🗄️ **4. Master Database**
-    Central hub for all order data.
+    The central source of truth for all historical and active orders.
     
     **Tab 1: View & Bulk Edit**
-    - **Toggle "Show Active Orders Only"** → Hide completed deliveries
-    - **Click "🔄 Refresh"** → Load latest data
-    - **Search box** → Filter by name, ID, city, product
-    - **Edit cells** (admin only) → Double-click to change values
-    - **Save Changes** → Updates all edited rows
+    - **Toggle "Active Only":** Quickly hide delivered or cancelled orders.
+    - **Bulk Editor (Admin Only):** Double-click any cell in the table to change values (e.g., changing multiple cities or statuses at once) and click **"Save Changes"**.
     
     **Tab 2: Search & Delete**
-    - **Search for record** → Find by name, ID, email, product
-    - **Select exact row** → Pick from dropdown
-    - **Type Order ID to confirm** → Safety check
-    - **Permanently Delete** (admin only) → Cannot be undone!
+    - **Safety First:** To delete, you must search for the record, select it from the dropdown, and **manually type the Order ID** to confirm.
     
     ---
     
     ### 👤 **5. Individual Seller Pages**
-    View orders for a specific seller.
+    Dedicated, view-only dashboards for each seller.
     
-    - **Click "🔄 Sync Seller Data"** → Load latest orders
-    - **Lunch Tab** → See all lunch orders and quantities
-    - **Dinner Tab** → See all dinner orders and quantities
-    - View-only (no editing on these pages)
+    - **Lunch & Dinner Tabs:** Automatically splits orders by delivery time.
+    - **Dynamic Filtering:** Shows only orders assigned to that specific seller code.
+    - **Pro Tip:** Use the **Master Database** or **Order Management** to make changes; seller pages will reflect those changes immediately after a sync.
     
     ---
     
-    ### 🆘 **Troubleshooting**
-    1. **Page not loading?** → Refresh (F5 or Cmd+R)
-    2. **Error message?** → Take a screenshot and contact the team
-    3. **Can't edit?** → Make sure you're logged in as admin
+    ### 🆘 **Troubleshooting & FAQs**
+    1. **"Order ID 30233 is unmarked but I know it's in the DB"** → Ensure the record in the database has the same SKU. The system checks for the specific Order + SKU combo.
+    2. **"Update Failed: Row signature mismatch"** → This happens if someone else edited the record while you had it open. Refresh and try again.
+    3. **"Can't see a recently added seller?"** → The app loads the seller list on startup. Refresh the browser to update the sidebar.
     
     ---
     
@@ -107,8 +97,3 @@ def instructions_page():
             Order Management    Individual Seller Pages
     ```
     """)
-    
-    # # Get the absolute path to the flowchart image
-    # current_dir = os.path.dirname(os.path.abspath(__file__))
-    # image_path = os.path.join(current_dir, "..", "assets", "flowchart.png")
-    # st.image(image_path, width=500)
