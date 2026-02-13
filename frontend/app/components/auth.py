@@ -19,17 +19,25 @@ import time
 SUPERUSER_USERNAME = os.getenv("SUPERUSER_USERNAME", "admin")
 SUPERUSER_PASSWORD = os.getenv("SUPERUSER_PASSWORD", "admin")
 
-# Session cache file path
-SESSION_CACHE_FILE = ".auth_session.json"
+# Session cache file for local development (ignored on Cloud Run)
+SESSION_CACHE_FILE = ".auth_session.json" 
 SESSION_DURATION = 5 * 60 * 60  # 5 hours in seconds
 
 def save_auth_session(user_info):
-    """Save authentication session to a local file."""
+    """
+    Save authentication session to a local file.
+    ONLY enabled in local development to prevent cross-user leakage on Cloud Run.
+    """
+    if os.getenv("K_SERVICE"):
+        return
+        
     data = {
         "user_info": user_info,
         "expiry": time.time() + SESSION_DURATION
     }
     try:
+        # Avoid creating the file if it doesn't exist and we are not in local dev
+        # But here we just check K_SERVICE
         with open(SESSION_CACHE_FILE, "w") as f:
             json.dump(data, f)
     except Exception as e:
@@ -37,8 +45,11 @@ def save_auth_session(user_info):
         logging.getLogger(__name__).error(f"Failed to save auth session: {e}")
 
 def load_auth_session():
-    """Load authentication session from a local file if valid."""
-    if not os.path.exists(SESSION_CACHE_FILE):
+    """
+    Load authentication session from a local file.
+    ONLY enabled in local development.
+    """
+    if os.getenv("K_SERVICE") or not os.path.exists(SESSION_CACHE_FILE):
         return None
     
     try:
@@ -59,8 +70,8 @@ def load_auth_session():
     return None
 
 def clear_auth_session():
-    """Remove the auth session file."""
-    if os.path.exists(SESSION_CACHE_FILE):
+    """Remove the auth session file if in local dev."""
+    if not os.getenv("K_SERVICE") and os.path.exists(SESSION_CACHE_FILE):
         os.remove(SESSION_CACHE_FILE)
 
 
