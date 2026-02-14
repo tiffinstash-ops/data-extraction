@@ -44,13 +44,17 @@ def dashboard_page():
         
         df_display = st.session_state.master_data.copy()
         
+        # 1. Add Selection Column (Default True)
+        if "Select" not in df_display.columns:
+            df_display.insert(0, "Select", True)
+        
         if "ORDER ID" in df_display.columns:
             try:
                 unique_ids = df_display["ORDER ID"].unique().tolist()
                 existing_ids = set(check_existing_ids_api(unique_ids))
                 
                 if existing_ids:
-                    st.warning("⚠️ Some orders have alrready been saved in Master Database")
+                    st.warning("⚠️ Some orders have already been saved in Master Database")
                 
                 def mark_existing(oid):
                     str_oid = str(oid)
@@ -66,8 +70,12 @@ def dashboard_page():
             mask = df_display.astype(str).apply(lambda x: x.str.contains(search, case=False, na=False)).any(axis=1)
             df_display = df_display[mask]
 
-        st.dataframe(
-            df_display, use_container_width=True, hide_index=True
+        # Use data_editor to allow checkbox selection
+        edited_df = st.data_editor(
+            df_display, 
+            use_container_width=True, 
+            hide_index=True,
+            key="dashboard_upload_editor"
         )
 
         c1, c2 = st.columns(2)
@@ -77,24 +85,34 @@ def dashboard_page():
                 "📥 Download Master CSV", csv, "master_data.csv", "text/csv"
             )
         with c2:
-            if st.button("🚀 Upload to Database", help="Insert records into PostgreSQL"):
-                try:
-                    # Sanitize dataframe before upload
-                    df_clean = st.session_state.master_data.copy()
-                    
-                    # Convert object columns containing NaNs to None/Empty string to avoid JSON errors
-                    df_clean = df_clean.where(pd.notnull(df_clean), None)
-                    
-                    # Ensure datetime columns are strings
-                    for col in df_clean.select_dtypes(include=['datetime', 'datetimetz']).columns:
-                        df_clean[col] = df_clean[col].astype(str).replace('NaT', None)
+            if st.button("🚀 Upload Selected to Database", help="Insert selected records into PostgreSQL"):
+                # Filter for selected rows
+                selected_rows = edited_df[edited_df["Select"] == True].copy()
+                
+                if selected_rows.empty:
+                    st.warning("No records selected. Please check at least one row.")
+                else:
+                    try:
+                        # Sanitize dataframe before upload
+                        df_clean = selected_rows.drop(columns=["Select"])
                         
-                    data = df_clean.to_dict(orient="records")
-                    
-                    res = upload_master_data_api(data)
-                    inserted = res.get('inserted', 0)
-                    updated = res.get('updated', 0)
-                    skipped = res.get('skipped', 0)
-                    st.success(f"Upload Complete! New: {inserted}, Updated: {updated}, Skipped (Duplicate): {skipped}")
-                except Exception as e:
-                    st.error(f"Upload Failed: {e}")
+                        # Fix ORDER ID (remove " ✅ (On DB)" suffix if present)
+                        if "ORDER ID" in df_clean.columns:
+                            df_clean["ORDER ID"] = df_clean["ORDER ID"].astype(str).str.split().str[0]
+                        
+                        # Convert object columns containing NaNs to None/Empty string to avoid JSON errors
+                        df_clean = df_clean.where(pd.notnull(df_clean), None)
+                        
+                        # Ensure datetime columns are strings
+                        for col in df_clean.select_dtypes(include=['datetime', 'datetimetz']).columns:
+                            df_clean[col] = df_clean[col].astype(str).replace('NaT', None)
+                            
+                        data = df_clean.to_dict(orient="records")
+                        
+                        res = upload_master_data_api(data)
+                        inserted = res.get('inserted', 0)
+                        updated = res.get('updated', 0)
+                        skipped = res.get('skipped', 0)
+                        st.success(f"Upload Complete! New: {inserted}, Updated: {updated}, Skipped (Duplicate): {skipped}")
+                    except Exception as e:
+                        st.error(f"Upload Failed: {e}")

@@ -161,6 +161,10 @@ def delivery_management_page():
         if st.session_state.get("shopify_master_results") is not None:
             sm_df = st.session_state.shopify_master_results.copy()
             
+            # 1. Add Selection Column
+            if "Select" not in sm_df.columns:
+                sm_df.insert(0, "Select", False)
+
             # Check for existing orders
             try:
                 unique_ids = sm_df["ORDER ID"].unique().tolist()
@@ -179,7 +183,7 @@ def delivery_management_page():
                 st.warning(f"Could not check existing orders: {e}")
 
             st.write("### Processed Results (Preview & Edit)")
-            st.info("✏️ You can edit the values below before syncing to the database.")
+            st.info("✏️ Check/Uncheck rows to select which ones to upload. You can also edit values directly.")
             
             # Editable Data View
             edited_s_df = st.data_editor(
@@ -190,19 +194,28 @@ def delivery_management_page():
                 key="shopify_sync_editor"
             )
             
-            if st.button("⬆️ Upload to Master Database"):
-                try:
-                    with st.spinner("Uploading records..."):
-                        # Get data from editor
-                        upload_data = edited_s_df.where(pd.notnull(edited_s_df), None).to_dict(orient="records")
-                        
-                        res = upload_master_data_api(upload_data)
-                        st.success(f"Upload Complete! New: {res.get('inserted')}, Updated: {res.get('updated')}")
-                        time.sleep(1)
-                        st.session_state.pop("shopify_master_results", None)
-                        st.rerun()
-                except Exception as e:
-                    st.error(f"Upload Failed: {e}")
+            if st.button("⬆️ Upload Selected to Master Database"):
+                # Filter for selected rows
+                selected_rows = edited_s_df[edited_s_df["Select"] == True].copy()
+                
+                if selected_rows.empty:
+                    st.warning("No records selected. Please check at least one row.")
+                else:
+                    try:
+                        with st.spinner(f"Uploading {len(selected_rows)} record(s)..."):
+                            # Remove the 'Select' column before sending to API
+                            upload_df = selected_rows.drop(columns=["Select"])
+                            
+                            # Sanitize for JSON (convert NaNs to None)
+                            upload_data = upload_df.where(pd.notnull(upload_df), None).to_dict(orient="records")
+                            
+                            res = upload_master_data_api(upload_data)
+                            st.success(f"Upload Complete! New: {res.get('inserted')}, Updated: {res.get('updated')}")
+                            time.sleep(1)
+                            st.session_state.pop("shopify_master_results", None)
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"Upload Failed: {e}")
 
     st.divider()
 
