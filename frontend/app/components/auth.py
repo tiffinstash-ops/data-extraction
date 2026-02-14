@@ -180,8 +180,16 @@ def show_login_page():
     col1, col2, col3 = st.columns([1, 1, 1])
     
     with col2:
-        st.markdown("### 🔐 Tiffinstash Operations")
-        st.markdown("Please log in to access the dashboard")
+        # Display Logo on login page
+        logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "logo.png")
+        if os.path.exists(logo_path):
+            st.image(logo_path, use_container_width=True)
+            st.markdown("<br>", unsafe_allow_html=True)
+        else:
+            st.markdown("<h2 style='text-align: center; color: #E05600;'>Tiffinstash</h2>", unsafe_allow_html=True)
+
+        st.markdown("<h4 style='text-align: center; color: #343A40; margin-top: -10px;'>Operations Control</h4>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: #666;'>Please log in to access the dashboard</p>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         
         # Check if OAuth is configured
@@ -192,8 +200,9 @@ def show_login_page():
             st.markdown("<br>", unsafe_allow_html=True)
             st.markdown(f"<p style='text-align: center; color: #666; font-size: 12px;'>Sign in with your @{ALLOWED_DOMAIN} account</p>", unsafe_allow_html=True)
             
-            # Show divider
-            st.markdown("<hr style='margin: 20px 0;'>", unsafe_allow_html=True)
+            # Show divider with logo color
+            st.markdown("<hr style='margin: 20px 0; border: 0; border-top: 1px solid #eee;'>", unsafe_allow_html=True)
+            st.markdown("<p style='text-align: center; color: #999; font-size: 11px; margin-top: -30px; background: white; width: 40px; margin-left: auto; margin-right: auto;'>OR</p>", unsafe_allow_html=True)
             
             # Show traditional login as fallback
             with st.expander("Or use traditional login"):
