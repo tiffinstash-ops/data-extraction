@@ -109,10 +109,33 @@ def dashboard_page():
                             
                         data = df_clean.to_dict(orient="records")
                         
-                        res = upload_master_data_api(data)
-                        inserted = res.get('inserted', 0)
-                        updated = res.get('updated', 0)
-                        skipped = res.get('skipped', 0)
-                        st.success(f"Upload Complete! New: {inserted}, Updated: {updated}, Skipped (Duplicate): {skipped}")
+                        # Chunked Upload
+                        chunk_size = 50
+                        total_rows = len(data)
+                        
+                        progress_container = st.empty()
+                        status_text = st.empty()
+                        
+                        total_inserted = 0
+                        total_updated = 0
+                        total_skipped = 0
+                        
+                        for i in range(0, total_rows, chunk_size):
+                            chunk = data[i : i + chunk_size]
+                            percent = min(100, int((i + len(chunk)) / total_rows * 100))
+                            
+                            status_text.markdown(f"**Uploading:** {percent}% ({i + len(chunk)}/{total_rows} records)")
+                            progress_container.progress(percent / 100)
+                            
+                            res = upload_master_data_api(chunk)
+                            
+                            total_inserted += res.get('inserted', 0)
+                            total_updated += res.get('updated', 0)
+                            total_skipped += res.get('skipped', 0)
+                        
+                        progress_container.empty()
+                        status_text.empty()
+                        st.success(f"✅ Upload Complete! New: {total_inserted}, Updated: {total_updated}, Skipped: {total_skipped}")
+                        
                     except Exception as e:
                         st.error(f"Upload Failed: {e}")

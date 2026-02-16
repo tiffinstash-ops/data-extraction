@@ -181,60 +181,49 @@ def upload_master_data(request: MasterUploadRequest):
                 # Filter out columns that don't exist in DB
                 valid_row = {k: v for k, v in row.items() if k in db_cols}
                 if not valid_row:
-                    logger.warning(f"Dropping row: No matching columns found. Keys: {list(row.keys())}")
                     continue
                 
-                oid = valid_row.get("ORDER ID")
+                oid = str(valid_row.get("ORDER ID", "")).strip()
                 if not oid:
-                    logger.warning(f"Dropping row: Missing ORDER ID. Valid keys: {list(valid_row.keys())}")
                     continue
                     
-                # Params preparation
-                def safe_param(k):
-                    # Only allow letters, numbers and underscores in bind parameter names
-                    # Replace spaces with underscores
-                    return re.sub(r'[^a-zA-Z0-9_]', '_', k.strip())
-
-
-                # Normalize DATE to YYYY-MM-DD (PostgreSQL rejects "30-Jan")
+                # Normalize DATE to YYYY-MM-DD
                 date_val = valid_row.get("DATE")
                 if date_val and isinstance(date_val, str):
                     try:
                         val_strip = date_val.strip()
-                        # If matches "31-Jan", "5-Feb", etc.
                         if re.match(r'^\d{1,2}-[A-Za-z]{3}$', val_strip):
                             current_year = datetime.now().year
                             parsed = datetime.strptime(f"{val_strip}-{current_year}", "%d-%b-%Y")
                             valid_row["DATE"] = parsed.strftime("%Y-%m-%d")
                         else:
-                            # Try general parsing if it's not DD-MMM
-                            # (This handles YYYY-MM-DD or other standard formats if they were strings)
                             pd_date = pd.to_datetime(val_strip, errors='coerce')
                             if pd.notnull(pd_date):
                                 valid_row["DATE"] = pd_date.strftime("%Y-%m-%d")
-                    except Exception:
-                        pass  # Leave as-is if parsing fails
+                    except: pass
 
-                # Convert empty strings to None to avoid invalid integer '' errors
+                def safe_param(k):
+                    return re.sub(r'[^a-zA-Z0-9_]', '_', k.strip())
+
                 params = {
                     safe_param(k): (None if v == "" else v)
                     for k, v in valid_row.items()
                 }
                 
                 try:
-                    # 4. Check for existence (Composite Key: ORDER ID + SKU)
-                    sku_val = valid_row.get("SKU")
-                    exists = None
+                    sku_val = str(valid_row.get("SKU", "")).strip()
+                    if sku_val == "None" or not sku_val: sku_val = None
                     
+                    exists = None
                     if sku_val:
                         check_sql = text(f'SELECT * FROM "{table_name}" WHERE "ORDER ID" = :oid AND "SKU" = :sku')
-                        exists = conn.execute(check_sql, {"oid": str(oid), "sku": str(sku_val)}).fetchone()
+                        exists = conn.execute(check_sql, {"oid": oid, "sku": sku_val}).fetchone()
                     else:
                         check_sql = text(f'SELECT * FROM "{table_name}" WHERE "ORDER ID" = :oid AND "SKU" IS NULL')
-                        exists = conn.execute(check_sql, {"oid": str(oid)}).fetchone()
+                        exists = conn.execute(check_sql, {"oid": oid}).fetchone()
                     
                     if exists:
-                        # Normalize for comparison/idempotency check
+                        # Normalize for comparison
                         existing_data = dict(exists._mapping)
                         is_duplicate = True
                         for k, v in valid_row.items():
@@ -249,7 +238,7 @@ def upload_master_data(request: MasterUploadRequest):
                             skipped_count += 1
                             continue
 
-                        # UPDATE existing record
+                        # UPDATE
                         set_parts = [f'"{k}" = :{safe_param(k)}' for k in valid_row.keys() if k not in ["ORDER ID", "SKU"]]
                         if set_parts:
                             set_str = ", ".join(set_parts)
@@ -261,20 +250,18 @@ def upload_master_data(request: MasterUploadRequest):
                             conn.execute(sql, params)
                             updated_count += 1
                     else:
-                        # INSERT new record
+                        # INSERT
                         cols_str = ", ".join([f'"{k}"' for k in valid_row.keys()])
                         vals_str = ", ".join([f":{safe_param(k)}" for k in valid_row.keys()])
                         sql = text(f'INSERT INTO "{table_name}" ({cols_str}) VALUES ({vals_str})')
                         conn.execute(sql, params)
                         success_count += 1
-                    
-                    # Commit per row to ensure isolation
-                    conn.commit()
                 except Exception as row_e:
-                    # Rollback the transaction for this row failure
-                    conn.rollback()
                     error_count += 1
-                    logger.error(f"Failed to process row {oid}: {row_e}")
+                    logger.error(f"Row {oid} error: {row_e}")
+            
+            # Commit once AFTER all rows in the batch are processed
+            conn.commit()
             
             return {
                 "status": "success",

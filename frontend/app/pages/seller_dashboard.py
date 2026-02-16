@@ -35,12 +35,21 @@ def seller_page(seller_name, seller_code):
                 df_h = pd.DataFrame(data_h)
                 df_s = pd.DataFrame(data_s)
 
+                # Filter df_s (Manual Aggregations) to only show the LATEST date
+                if not df_s.empty and "DATE" in df_s.columns:
+                    # Convert to datetime for reliable sorting
+                    df_s['temp_date'] = pd.to_datetime(df_s['DATE'], errors='coerce')
+                    latest_date = df_s['temp_date'].max()
+                    if pd.notnull(latest_date):
+                        df_s = df_s[df_s['temp_date'] == latest_date].copy()
+                        st.info(f"📅 Showing Manual Aggregations for the latest date: {latest_date.strftime('%Y-%m-%d')}")
+                    df_s = df_s.drop(columns=['temp_date'])
+
                 df_combined = pd.concat([df_h, df_s], ignore_index=True)
                 
                 df = sanitize_df(df_combined)
                 
                 df["DESCRIPTION"] = df["DESCRIPTION"].fillna("YOUR CUSTOMER").replace("", "YOUR CUSTOMER")
-
 
                 # Filter for this seller
                 if 'SELLER' in df.columns:

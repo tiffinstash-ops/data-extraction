@@ -39,20 +39,25 @@ def _load_sellers_csv() -> List[dict]:
 @router.get("/seller-sheet-urls")
 def get_seller_sheet_urls():
     creds = get_credentials()
-    
     service = build('drive', 'v3', credentials=creds)
 
     query = (f"'{FOLDER_ID}' in parents and "
              f"mimeType = 'application/vnd.google-apps.spreadsheet' and "
              f"trashed = false")
 
-    # We only request the 'id' field to keep the response lean
-    results = service.files().list(q=query, fields="files(id)").execute()
-
-    # Extract IDs into a simple Python list
-    file_ids = [file['id'] for file in results.get('files', [])]
-
-    return file_ids
+    max_retries = 3
+    for attempt in range(max_retries + 1):
+        try:
+            results = service.files().list(q=query, fields="files(id)").execute()
+            file_ids = [file['id'] for file in results.get('files', [])]
+            return file_ids
+        except Exception as e:
+            if "429" in str(e) and attempt < max_retries:
+                logger.warning(f"Rate limit (429) hit in get_seller_sheet_urls. Waiting 15s... (Attempt {attempt+1}/{max_retries})")
+                time.sleep(15)
+                continue
+            logger.error(f"Error in get_seller_sheet_urls: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/sellers")
 def get_sellers():
@@ -67,62 +72,71 @@ def get_sellers():
 
 @router.get("/fetch-seller-data")
 def fetch_seller_data(sheet_id: str):
-    try:
-        SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
-        creds = get_credentials(scopes=SCOPES)
-        client = gspread.authorize(creds)
-        
-        sh = client.open_by_key(sheet_id)
-        # Assuming worksheet at index 3 based on user request ("Sheet1" or specific index)
-        worksheet = sh.get_worksheet(3)
-        
-        data = worksheet.get_all_records()
-        df = pd.DataFrame(data)
+    max_retries = 3
+    for attempt in range(max_retries + 1):
+        try:
+            SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+            creds = get_credentials(scopes=SCOPES)
+            client = gspread.authorize(creds)
+            
+            sh = client.open_by_key(sheet_id)
+            worksheet = sh.get_worksheet(3)
+            
+            data = worksheet.get_all_records()
+            df = pd.DataFrame(data)
 
-        # Standard Cleaning for JSON
-        df = df.replace([np.inf, -np.inf], np.nan)
-        df = df.astype(object).where(pd.notnull(df), None)
-        
-        return df.to_dict(orient="records")
-    except Exception as e:
-        logger.error(f"Google Sheet error: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to fetch sheet: {str(e)}")
+            # Standard Cleaning for JSON
+            df = df.replace([np.inf, -np.inf], np.nan)
+            df = df.astype(object).where(pd.notnull(df), None)
+            
+            return df.to_dict(orient="records")
+        except Exception as e:
+            if "429" in str(e) and attempt < max_retries:
+                logger.warning(f"Rate limit (429) hit for {sheet_id}. Waiting 15s... (Attempt {attempt+1}/{max_retries})")
+                time.sleep(15)
+                continue
+            logger.error(f"Google Sheet error: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to fetch sheet: {str(e)}")
 
 @router.get("/fetch-single-seller-ongoing")
 def fetch_single_seller_ongoing(sid: str):
-    """Fetches 'Ongoing' data from a single sheet's 'SD DATA' tab."""
-    try:
-        SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
-        creds = get_credentials(scopes=SCOPES)
-        # Authorize per request or use a pool if optimized, but here we just auth
-        client = gspread.authorize(creds)
-        
-        sh = client.open_by_key(sid)
+    """Fetches 'Ongoing' data from a single sheet's 'SD DATA' tab with 429 retry logic."""
+    max_retries = 3
+    for attempt in range(max_retries + 1):
         try:
-            worksheet = sh.worksheet("SD DATA")
-        except gspread.WorksheetNotFound:
-            return []
+            SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+            creds = get_credentials(scopes=SCOPES)
+            client = gspread.authorize(creds)
             
-        values = worksheet.get_all_values()
-        if len(values) < 2:
-            return []
+            sh = client.open_by_key(sid)
+            try:
+                worksheet = sh.worksheet("SD DATA")
+            except gspread.WorksheetNotFound:
+                return []
+                
+            values = worksheet.get_all_values()
+            if len(values) < 2:
+                return []
+                
+            header_row = values[0]
+            headers = header_row[2:26] if len(header_row) >= 26 else []
+            rows = []
             
-        header_row = values[0]
-        headers = header_row[2:26] if len(header_row) >= 26 else []
-        rows = []
-        
-        for row in values[1:]:
-            if len(row) > 23:
-                val_x = str(row[23]).lower()
-                if "ongoing" in val_x:
-                    target_values = row[2:26]
-                    if headers and len(target_values) == len(headers):
-                        rows.append(dict(zip(headers, target_values)))
-        return rows
-    except Exception as e:
-        logger.error(f"Error fetching sheet {sid}: {e}")
-        # Return empty list on failure so the aggregate loop can continue
-        return []
+            for row in values[1:]:
+                if len(row) > 23:
+                    val_x = str(row[23]).lower()
+                    if "ongoing" in val_x:
+                        target_values = row[2:26]
+                        if headers and len(target_values) == len(headers):
+                            rows.append(dict(zip(headers, target_values)))
+            return rows
+        except Exception as e:
+            if "429" in str(e) and attempt < max_retries:
+                logger.warning(f"Rate limit (429) hit for sheet {sid}. Waiting 15s before retry {attempt+1}/{max_retries}...")
+                time.sleep(15)
+                continue
+            logger.error(f"Error fetching sheet {sid}: {e}")
+            return []
 
 @router.post("/finalize-seller-data")
 def finalize_seller_data(rows: List[dict]):
